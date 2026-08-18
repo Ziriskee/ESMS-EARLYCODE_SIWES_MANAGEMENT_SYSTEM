@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+:root {
+  --ec-dark: #2a2a2b;
+  --ec-gold: #fbcd15;
+}
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-color: var(--ec-gold) var(--ec-dark);
+  scrollbar-width: thin;
+}
+
+/* Sticky navbar positioning */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+/* Custom scrollbar for webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ec-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ec-gold);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #e5b800;
+}
+
+@layer base {
+  body {
+    font-family: "Source Sans 3", sans-serif;
+    background-color: #2a2a2b;
+    color: white;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Playfair Display", serif;
+  }
+}
+
+@layer utilities {
+  .bg-ec-dark {
+    background-color: var(--ec-dark);
+  }
+  .bg-ec-dark\/90 {
+    background-color: rgba(42, 42, 43, 0.9);
+  }
+  .bg-ec-gold {
+    background-color: var(--ec-gold);
+  }
+  .bg-ec-gold\/5 {
+    background-color: rgba(251, 205, 21, 0.05);
+  }
+  .bg-ec-gold\/10 {
+    background-color: rgba(251, 205, 21, 0.1);
+  }
+  .bg-ec-gold\/20 {
+    background-color: rgba(251, 205, 21, 0.2);
+  }
+  .bg-ec-gold\/30 {
+    background-color: rgba(251, 205, 21, 0.3);
+  }
+  .text-ec-gold {
+    color: var(--ec-gold);
+  }
+  .text-ec-dark {
+    color: var(--ec-dark);
+  }
+  .border-ec-gold {
+    border-color: var(--ec-gold);
+  }
+  .border-ec-gold\/20 {
+    border-color: rgba(251, 205, 21, 0.2);
+  }
+  .border-ec-gold\/30 {
+    border-color: rgba(251, 205, 21, 0.3);
+  }
+  .shadow-ec-gold\/20 {
+    --tw-shadow-color: rgba(251, 205, 21, 0.2);
+    box-shadow: 0 25px 50px -12px var(--tw-shadow-color);
+  }
+  .hover\:border-ec-gold:hover {
+    border-color: var(--ec-gold);
+  }
+  .hover\:border-ec-gold\/30:hover {
+    border-color: rgba(251, 205, 21, 0.3);
+  }
+  .hover\:text-ec-gold:hover {
+    color: var(--ec-gold);
+  }
+  .hover\:bg-ec-gold:hover {
+    background-color: var(--ec-gold);
+  }
+  .hover\:bg-ec-gold\/30:hover {
+    background-color: rgba(251, 205, 21, 0.3);
+  }
+  .hover\:shadow-ec-gold\/20:hover {
+    --tw-shadow-color: rgba(251, 205, 21, 0.2);
+    box-shadow: 0 25px 50px -12px var(--tw-shadow-color);
+  }
+  .font-heading {
+    font-family: "Playfair Display", serif;
+  }
+  .font-body {
+    font-family: "Source Sans 3", sans-serif;
+  }
+  .font-nav {
+    font-family: "Nunito", sans-serif;
+  }
+}
