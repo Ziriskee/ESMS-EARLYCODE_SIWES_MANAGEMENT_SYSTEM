@@ -2,7 +2,7 @@
 
 export default function Hero() {
   return (
-    <section className="relative w-full px-6 pt-20 pb-24 md:pt-32 md:pb-40 flex flex-col items-center text-center">
+    <section className="relative w-full px-6 pt-20 pb-24 md:pt-32 md:pb-40 lg:pt-16 lg:pb-18 flex flex-col items-center text-center">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-ec-gold/5 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-ec-gold/[0.03] rounded-full blur-3xl" />

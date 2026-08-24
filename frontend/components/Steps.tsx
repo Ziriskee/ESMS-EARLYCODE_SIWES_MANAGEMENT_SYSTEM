@@ -27,7 +27,7 @@ const steps = [
 
 export default function Steps() {
   return (
-    <section id="steps" className="w-full px-6 py-20 md:py-32 bg-white/5">
+    <section id="steps" className="w-full px-6 py-20 md:py-26  bg-white/5">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
           <span className="text-ec-gold text-sm font-semibold tracking-widest uppercase mb-4 block font-body">
