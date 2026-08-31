@@ -3,6 +3,7 @@ SIWES Management System - Django REST Framework Serializers
 Serializers convert Django model instances to JSON for the React frontend.
 """
 
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import (
     User,
@@ -20,6 +21,8 @@ from .models import (
     Notification,
 )
 
+User = get_user_model()
+
 # ───────────────────────────────────────────────────────────────
 # USER SERIALIZERS
 # ───────────────────────────────────────────────────────────────
@@ -36,6 +39,8 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "phone",
+            "gender",
+            "address",
             "role",
             "profile_picture",
             "is_active",
@@ -58,18 +63,75 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return user
 
 
+class InternRegisterSerializer(serializers.Serializer):
+    """Plain serializer for intern registration. Manually creates User + InternProfile."""
+
+    # User fields
+    email = serializers.EmailField()
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    role = serializers.CharField(default="INTERN")
+
+    # InternProfile fields
+    gender = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    state_of_origin = serializers.CharField(required=False, allow_blank=True)
+    preferred_campus = serializers.CharField(required=False, allow_blank=True)
+    current_institution = serializers.CharField(required=False, allow_blank=True)
+    institution_address = serializers.CharField(required=False, allow_blank=True)
+    course_of_study = serializers.CharField(required=False, allow_blank=True)
+    current_level = serializers.CharField(required=False, allow_blank=True)
+    matric_number = serializers.CharField(required=False, allow_blank=True)
+    school_start_date = serializers.DateField(required=False, allow_null=True)
+    org_end_date = serializers.DateField(required=False, allow_null=True)
+    internship_duration = serializers.CharField(required=False, allow_blank=True)
+    other_duration = serializers.CharField(required=False, allow_blank=True)
+    why_intern = serializers.CharField(required=False, allow_blank=True)
+    emergency_contact_type = serializers.CharField(required=False, allow_blank=True)
+    emergency_phone = serializers.CharField(required=False, allow_blank=True)
+    declaration = serializers.CharField(required=False, allow_blank=True) 
+    chosen_courses = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=True,
+        allow_empty=False
+    )
+
+    
+
+    def validate_email(self, value):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value
+
+    def create(self, validated_data):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+
+        email=validated_data.get("email", "")
+        # Create user WITH gender and address
+        user = User.objects.create(
+            username=email,
+            email=email,
+            first_name=validated_data.get("first_name", ""),
+            last_name=validated_data.get("last_name", ""),
+            phone=validated_data.get("phone", ""),
+            gender=validated_data.get("gender", ""),  # ← ADDED
+            address=validated_data.get("address", ""),  # ← ADDED
+            role=validated_data.get("role", "INTERN"),
+        )
+        user.set_unusable_password()
+        user.save()
+
+        return user
+
+
 # ───────────────────────────────────────────────────────────────
 # PROFILE SERIALIZERS
 # ───────────────────────────────────────────────────────────────
-
-
-class AdminProfileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-
-    class Meta:
-        model = AdminProfile
-        fields = ["user", "admin_level"]
-
 
 class InstructorProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -122,14 +184,6 @@ class CourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         fields = ["id", "course_name", "course_code", "category", "is_active"]
-
-
-class InternCourseSerializer(serializers.ModelSerializer):
-    course = CourseSerializer(read_only=True)
-
-    class Meta:
-        model = InternCourse
-        fields = ["id", "course", "enrolled_at"]
 
 
 # ───────────────────────────────────────────────────────────────
