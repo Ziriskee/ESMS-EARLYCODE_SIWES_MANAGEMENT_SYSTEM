@@ -27,31 +27,6 @@ class IsIntern(permissions.BasePermission):
         return request.user.is_authenticated and request.user.is_intern
 
 
-class IsAdminOrInstructor(permissions.BasePermission):
-    """Admins or instructors can access."""
-
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and (
-            request.user.is_admin or request.user.is_instructor
-        )
-
-
-class IsOwnerOrAdmin(permissions.BasePermission):
-    """Object-level: user owns the resource OR is admin."""
-
-    def has_object_permission(self, request, view, obj):
-        if request.user.is_admin:
-            return True
-        # Check if obj has a user attribute
-        if hasattr(obj, "user"):
-            return obj.user == request.user
-        if hasattr(obj, "intern"):
-            return obj.intern.user == request.user
-        if hasattr(obj, "sender"):
-            return obj.sender == request.user
-        return False
-
-
 class CanMessageRecipient(permissions.BasePermission):
     """
     Interns can only message their assigned instructor or admin.
