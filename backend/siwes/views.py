@@ -1,24 +1,21 @@
-"""
-SIWES Management System — Django REST Framework Views
-All API endpoint logic for Admin, Instructor, and Intern roles.
-"""
-
-from django.db.models import Count, Q
-from django.shortcuts import get_object_or_404
-from rest_framework import generics, status, permissions
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.core.mail import send_mail
+from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
+from django.utils import timezone
+from rest_framework import generics, permissions, serializers, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.utils import timezone
+from django.db import transaction
+from rest_framework_simplejwt.tokens import RefreshToken
+from urllib.parse import quote
 
 from .models import (
     User,
-    AdminProfile,
     InstructorProfile,
     InternProfile,
     Course,
     InternCourse,
-    ScheduleSlot,
     InternSchedule,
     Task,
     TaskAssignment,
@@ -28,550 +25,650 @@ from .models import (
 )
 from .serializers import (
     UserSerializer,
-    UserCreateSerializer,
-    AdminProfileSerializer,
     InstructorProfileSerializer,
     InternProfileSerializer,
     CourseSerializer,
-    InternCourseSerializer,
-    ScheduleSlotSerializer,
     InternScheduleSerializer,
     TaskSerializer,
     TaskAssignmentSerializer,
     ReportSerializer,
     MessageSerializer,
     NotificationSerializer,
+    InternRegisterSerializer,
 )
-from .permissions import (
-    IsAdmin,
-    IsInstructor,
-    IsIntern,
-    IsAdminOrInstructor,
-    IsOwnerOrAdmin,
-)
+from .permissions import IsAdmin, IsInstructor, IsIntern
 
-# ═══════════════════════════════════════════════════════════════
-# AUTH & REGISTRATION
-# ═══════════════════════════════════════════════════════════════
+User = get_user_model()
+signer = TimestampSigner()
 
 
-class InternRegisterView(APIView):
-    """
-    POST /api/auth/register/
-    Creates a new User + InternProfile from the registration form.
-    No authentication required.
-    """
+# ============================================================================
+# AUTHENTICATION & MAGIC LINKS
+# ============================================================================
 
+
+class InternRegisterView(generics.CreateAPIView):
+    """Register a new intern. No password required — magic link login."""
+
+    queryset = User.objects.all()
+    serializer_class = InternRegisterSerializer
     permission_classes = [permissions.AllowAny]
 
-    def post(self, request):
-        data = request.data
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        data["role"] = "INTERN"
 
-        # 1. Create User
-        user_data = {
-            "email": data.get("email"),
-            "password": data.get(
-                "password", "changeme123"
-            ),  # TODO: generate or require
-            "first_name": (
-                data.get("fullName", "").split()[0] if data.get("fullName") else ""
-            ),
-            "last_name": (
-                " ".join(data.get("fullName", "").split()[1:])
-                if data.get("fullName")
-                else ""
-            ),
-            "phone": data.get("phone", ""),
-            "role": User.Role.INTERN,
-        }
-        user_serializer = UserCreateSerializer(data=user_data)
-        user_serializer.is_valid(raise_exception=True)
-        user = user_serializer.save()
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
 
-        # 2. Create InternProfile
-        intern = InternProfile.objects.create(
-            user=user,
-            state_of_origin=data.get("stateOfOrigin", ""),
-            preferred_campus=data.get("preferredCampus", ""),
-            current_institution=data.get("currentInstitution", ""),
-            institution_address=data.get("institutionAddress", ""),
-            course_of_study=data.get("courseOfStudy", ""),
-            current_level=data.get("currentLevel", ""),
-            matric_number=data.get("matricNumber", ""),
-            internship_duration=data.get("internshipDuration", ""),
-            other_duration=data.get("otherDuration", ""),
-            why_intern=data.get("whyIntern", ""),
-            emergency_contact_type=data.get("emergencyContact", ""),
-            emergency_phone=data.get("emergencyPhone", ""),
-            declaration=data.get("declaration", ""),
-            school_start_date=data.get("internshipStartDate") or None,
-            org_end_date=data.get("internshipEndDate") or None,
-            status=InternProfile.Status.PENDING,
-        )
+        # Validate chosen courses are existing active courses
+        chosen_course_ids = serializer.validated_data.get("chosen_courses", [])
+        chosen_course_ids = list(set(chosen_course_ids))  # deduplicate
 
-        # 3. Link chosen courses
-        chosen_courses = data.get("chosenCourses", [])
-        for course_name in chosen_courses:
-            course, _ = Course.objects.get_or_create(course_name=course_name)
-            InternCourse.objects.create(intern=intern, course=course)
+        courses = Course.objects.filter(id__in=chosen_course_ids, is_active=True)
+
+        if courses.count() != len(chosen_course_ids):
+            return Response(
+                {
+                    "success": False,
+                    "message": "One or more selected courses are invalid or inactive.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Atomic transaction: all-or-nothing
+        with transaction.atomic():
+            user = serializer.save()
+
+            # Create intern profile
+            intern = InternProfile.objects.create(
+                user=user,
+                state_of_origin=serializer.validated_data.get("state_of_origin", ""),
+                preferred_campus=serializer.validated_data.get("preferred_campus", ""),
+                current_institution=serializer.validated_data.get(
+                    "current_institution", ""
+                ),
+                institution_address=serializer.validated_data.get(
+                    "institution_address", ""
+                ),
+                course_of_study=serializer.validated_data.get("course_of_study", ""),
+                current_level=serializer.validated_data.get("current_level", ""),
+                matric_number=serializer.validated_data.get("matric_number", ""),
+                school_start_date=serializer.validated_data.get("school_start_date"),
+                org_end_date=serializer.validated_data.get("org_end_date"),
+                internship_duration=serializer.validated_data.get(
+                    "internship_duration", ""
+                ),
+                other_duration=serializer.validated_data.get("other_duration", ""),
+                why_intern=serializer.validated_data.get("why_intern", ""),
+                emergency_contact_type=serializer.validated_data.get(
+                    "emergency_contact_type", ""
+                ),
+                emergency_phone=serializer.validated_data.get("emergency_phone", ""),
+                declaration=serializer.validated_data.get("declaration", ""),
+                status="PENDING",
+            )
+
+            # Link chosen courses
+            for course in courses:
+                InternCourse.objects.create(intern=intern, course=course)
+
+        # Send welcome email with magic link (outside transaction)
+        self._send_welcome_email(user)
 
         return Response(
             {
                 "success": True,
-                "message": "Registration successful. Await admin approval.",
+                "message": "Registration successful. Check your email for a login link.",
                 "user": UserSerializer(user).data,
             },
             status=status.HTTP_201_CREATED,
         )
 
+    def _send_welcome_email(self, user):
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        login_url = f"{frontend_url}/login"
 
-class MeView(APIView):
-    """GET /api/auth/me/ — Returns current logged-in user."""
+        subject = "Welcome to EarlyCode SIWES"
 
+        message = (
+            f"Hi {user.first_name or user.email},\n\n"
+            "Your registration was successful.\n\n"
+            "To log in, go to the login page and request a magic link:\n"
+            f"{login_url}\n\n"
+            "EarlyCode SIWES Team"
+        )
+
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
+
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception as email_error:
+            print(f"Welcome email failed: {email_error}")
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def request_magic_link(request):
+    """User enters email → Django sends magic link."""
+    email = request.data.get("email")
+    if not email:
+        return Response(
+            {"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        # Don't reveal if email exists or not (security)
+        return Response(
+            {"message": "If an account exists, a login link has been sent."}
+        )
+
+    # 1. Generate and safely encode the token
+    token = signer.sign(user.email)
+    safe_token = quote(token)
+
+    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+    magic_link = f"{frontend_url}/verify-login?token={safe_token}"
+
+    # 🛡️ BULLETPROOF DEV LOG: Bypasses email encoding (=3D and line breaks)
+    if settings.DEBUG:
+        print("\n" + "🟢" * 30)
+        print(f"🔗 MAGIC LINK FOR {user.email}:")
+        print(magic_link)
+        print("🟢" * 30 + "\n")
+
+    # 2. Send the actual email (In production, Gmail/SMTP handles the decoding automatically)
+    send_mail(
+        subject="Your EarlyCode SIWES Login Link",
+        message=f"Hi {user.first_name or 'there'},\n\nClick this link to log in:\n{magic_link}\n\n- EarlyCode Team",
+        from_email="noreply@earlycode.com",
+        recipient_list=[user.email],
+        fail_silently=True,
+    )
+
+    return Response({"message": "If an account exists, a login link has been sent."})
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def verify_magic_link(request):
+    """User clicks magic link → Django verifies token, returns JWT."""
+    token = request.query_params.get("token")
+    if not token:
+        return Response(
+            {"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Verify token (expires after 1 hour = 3600 seconds)
+        email = signer.unsign(token, max_age=3600)
+        user = User.objects.get(email=email)
+    except (SignatureExpired, BadSignature, User.DoesNotExist):
+        return Response(
+            {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Update last login
+    user.last_login = timezone.now()
+    user.save(update_fields=["last_login"])
+
+    # Generate JWT tokens
+    refresh = RefreshToken.for_user(user)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Login successful",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data,
+        }
+    )
+
+
+class MeView(generics.RetrieveAPIView):
+    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request):
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+    def get_object(self):
+        return self.request.user
 
 
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 # ADMIN VIEWS
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 
 
-class AdminDashboardView(APIView):
-    """GET /api/admin/dashboard/ — Stats for admin dashboard."""
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_dashboard(request):
+    total_interns = InternProfile.objects.count()
+    total_instructors = InstructorProfile.objects.count()
+    pending_interns = InternProfile.objects.filter(status="PENDING").count()
+    active_interns = InternProfile.objects.filter(status="ACTIVE").count()
+    total_reports = Report.objects.count()
+    unread_reports = Report.objects.filter(status="SUBMITTED").count()
 
-    permission_classes = [IsAdmin]
-
-    def get(self, request):
-        total_interns = InternProfile.objects.count()
-        active_interns = InternProfile.objects.filter(
-            status=InternProfile.Status.ACTIVE
-        ).count()
-        pending_interns = InternProfile.objects.filter(
-            status=InternProfile.Status.PENDING
-        ).count()
-        total_instructors = InstructorProfile.objects.count()
-        total_reports = Report.objects.count()
-        unread_reports = Report.objects.filter(admin_seen=False).count()
-
-        return Response(
-            {
-                "total_interns": total_interns,
-                "active_interns": active_interns,
-                "pending_interns": pending_interns,
-                "total_instructors": total_instructors,
-                "total_reports": total_reports,
-                "unread_reports": unread_reports,
-            }
-        )
+    return Response(
+        {
+            "total_interns": total_interns,
+            "total_instructors": total_instructors,
+            "pending_interns": pending_interns,
+            "active_interns": active_interns,
+            "total_reports": total_reports,
+            "unread_reports": unread_reports,
+        }
+    )
 
 
 class AdminInternListCreateView(generics.ListCreateAPIView):
-    """GET/POST /api/admin/interns/ — List all interns or create one."""
-
-    permission_classes = [IsAdmin]
+    queryset = InternProfile.objects.all()
     serializer_class = InternProfileSerializer
-
-    def get_queryset(self):
-        queryset = InternProfile.objects.all()
-        status_filter = self.request.query_params.get("status")
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-        return queryset.select_related("user", "assigned_instructor")
+    permission_classes = [IsAdmin]
 
 
 class AdminInternDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """GET/PATCH/DELETE /api/admin/interns/<id>/"""
-
-    permission_classes = [IsAdmin]
-    serializer_class = InternProfileSerializer
     queryset = InternProfile.objects.all()
-    lookup_field = "pk"
-
-
-class AssignInstructorView(APIView):
-    """POST /api/admin/interns/<id>/assign-instructor/"""
-
+    serializer_class = InternProfileSerializer
     permission_classes = [IsAdmin]
 
-    def post(self, request, pk):
-        intern = get_object_or_404(InternProfile, pk=pk)
-        instructor_id = request.data.get("instructor_id")
-        instructor = get_object_or_404(InstructorProfile, pk=instructor_id)
 
-        intern.assigned_instructor = instructor
-        intern.status = InternProfile.Status.ACTIVE
-        intern.save()
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def assign_instructor(request, pk):
+    try:
+        intern = InternProfile.objects.get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response({"error": "Intern not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Notify intern
-        Notification.objects.create(
-            user=intern.user,
-            type=Notification.Type.INSTRUCTOR_ASSIGNED,
-            message=f"You have been assigned to instructor {instructor.user.get_full_name()}.",
+    instructor_id = request.data.get("instructor_id")
+    if not instructor_id:
+        return Response(
+            {"error": "instructor_id is required"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-        return Response({"success": True, "message": "Instructor assigned."})
-
-
-class SetInternDatesView(APIView):
-    """POST /api/admin/interns/<id>/set-dates/"""
-
-    permission_classes = [IsAdmin]
-
-    def post(self, request, pk):
-        intern = get_object_or_404(InternProfile, pk=pk)
-        intern.org_start_date = (
-            request.data.get("org_start_date") or intern.org_start_date
+    try:
+        instructor = InstructorProfile.objects.get(pk=instructor_id)
+    except InstructorProfile.DoesNotExist:
+        return Response(
+            {"error": "Instructor not found"}, status=status.HTTP_404_NOT_FOUND
         )
-        intern.org_end_date = request.data.get("org_end_date") or intern.org_end_date
-        intern.save()
-        return Response({"success": True, "message": "Dates updated."})
+
+    intern.assigned_instructor = instructor
+    intern.save()
+
+    Notification.objects.create(
+        user=intern.user,
+        type="INSTRUCTOR_ASSIGNED",
+        message=f"You have been assigned to instructor {instructor.user.get_full_name()}",
+    )
+
+    return Response({"success": True, "message": "Instructor assigned"})
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def set_intern_dates(request, pk):
+    try:
+        intern = InternProfile.objects.get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response({"error": "Intern not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    intern.org_start_date = request.data.get("org_start_date") or intern.org_start_date
+    intern.org_end_date = request.data.get("org_end_date") or intern.org_end_date
+    intern.status = request.data.get("status", intern.status)
+    intern.save()
+
+    return Response({"success": True, "message": "Dates updated"})
 
 
 class AdminInstructorListCreateView(generics.ListCreateAPIView):
-    """GET/POST /api/admin/instructors/"""
-
-    permission_classes = [IsAdmin]
-    serializer_class = InstructorProfileSerializer
     queryset = InstructorProfile.objects.all()
+    serializer_class = InstructorProfileSerializer
+    permission_classes = [IsAdmin]
 
 
 class AdminInstructorDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """GET/PATCH/DELETE /api/admin/instructors/<id>/"""
-
-    permission_classes = [IsAdmin]
-    serializer_class = InstructorProfileSerializer
     queryset = InstructorProfile.objects.all()
+    serializer_class = InstructorProfileSerializer
+    permission_classes = [IsAdmin]
+
+
+class AdminScheduleListCreateView(generics.ListCreateAPIView):
+    queryset = InternSchedule.objects.all()
+    serializer_class = InternScheduleSerializer
+    permission_classes = [IsAdmin]
 
 
 class AdminReportListView(generics.ListAPIView):
-    """GET /api/admin/reports/ — All reports across all campuses."""
-
-    permission_classes = [IsAdmin]
+    queryset = Report.objects.all()
     serializer_class = ReportSerializer
-    queryset = Report.objects.all().select_related("intern__user")
-
-
-class BroadcastMessageView(APIView):
-    """POST /api/admin/messages/broadcast/ — Send to multiple users."""
-
     permission_classes = [IsAdmin]
 
-    def post(self, request):
-        recipient_ids = request.data.get("recipient_ids", [])
-        content = request.data.get("content", "")
 
-        for user_id in recipient_ids:
-            recipient = get_object_or_404(User, pk=user_id)
-            Message.objects.create(
-                sender=request.user, recipient=recipient, content=content
-            )
-            Notification.objects.create(
-                user=recipient,
-                type=Notification.Type.MESSAGE_RECEIVED,
-                message="You have a new message from admin.",
-            )
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def broadcast_message(request):
+    recipients = request.data.get("recipients", [])  # list of user IDs
+    content = request.data.get("content")
 
+    if not content:
         return Response(
-            {"success": True, "message": f"Message sent to {len(recipient_ids)} users."}
+            {"error": "Content is required"}, status=status.HTTP_400_BAD_REQUEST
         )
 
+    for user_id in recipients:
+        try:
+            user = User.objects.get(id=user_id)
+            Message.objects.create(sender=request.user, recipient=user, content=content)
+        except User.DoesNotExist:
+            pass
 
-# ═══════════════════════════════════════════════════════════════
+    return Response({"success": True, "message": "Messages sent"})
+
+
+# ============================================================================
 # INSTRUCTOR VIEWS
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 
 
-class InstructorDashboardView(APIView):
-    """GET /api/instructor/dashboard/"""
+@api_view(["GET"])
+@permission_classes([IsInstructor])
+def instructor_dashboard(request):
+    instructor = request.user.instructorprofile
+    my_interns = InternProfile.objects.filter(assigned_instructor=instructor)
+    my_tasks = Task.objects.filter(instructor=instructor)
+    pending_reports = Report.objects.filter(
+        intern__assigned_instructor=instructor, status="SUBMITTED"
+    )
 
-    permission_classes = [IsInstructor]
-
-    def get(self, request):
-        instructor = request.user.instructor_profile
-        intern_count = instructor.assigned_interns.count()
-        pending_tasks = TaskAssignment.objects.filter(
-            task__instructor=instructor, status=TaskAssignment.Status.PENDING
-        ).count()
-        pending_reports = Report.objects.filter(
-            intern__assigned_instructor=instructor, status=Report.Status.SUBMITTED
-        ).count()
-
-        return Response(
-            {
-                "intern_count": intern_count,
-                "pending_tasks": pending_tasks,
-                "pending_reports": pending_reports,
-            }
-        )
+    return Response(
+        {
+            "total_interns": my_interns.count(),
+            "total_tasks": my_tasks.count(),
+            "pending_reports": pending_reports.count(),
+        }
+    )
 
 
-class InstructorInternListView(generics.ListAPIView):
-    """GET /api/instructor/interns/ — My assigned interns."""
-
-    permission_classes = [IsInstructor]
-    serializer_class = InternProfileSerializer
-
-    def get_queryset(self):
-        return InternProfile.objects.filter(
-            assigned_instructor=self.request.user.instructor_profile
-        )
+@api_view(["GET"])
+@permission_classes([IsInstructor])
+def my_interns(request):
+    instructor = request.user.instructorprofile
+    interns = InternProfile.objects.filter(assigned_instructor=instructor)
+    serializer = InternProfileSerializer(interns, many=True)
+    return Response(serializer.data)
 
 
 class InstructorTaskListCreateView(generics.ListCreateAPIView):
-    """GET/POST /api/instructor/tasks/"""
-
-    permission_classes = [IsInstructor]
     serializer_class = TaskSerializer
+    permission_classes = [IsInstructor]
 
     def get_queryset(self):
-        return Task.objects.filter(instructor=self.request.user.instructor_profile)
+        return Task.objects.filter(instructor=self.request.user.instructorprofile)
 
     def perform_create(self, serializer):
-        serializer.save(instructor=self.request.user.instructor_profile)
+        serializer.save(instructor=self.request.user.instructorprofile)
 
 
 class InstructorTaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """GET/PATCH/DELETE /api/instructor/tasks/<id>/"""
-
-    permission_classes = [IsInstructor]
     serializer_class = TaskSerializer
+    permission_classes = [IsInstructor]
 
     def get_queryset(self):
-        return Task.objects.filter(instructor=self.request.user.instructor_profile)
+        return Task.objects.filter(instructor=self.request.user.instructorprofile)
 
 
-class AssignTaskToInternsView(APIView):
-    """POST /api/instructor/tasks/<id>/assign/"""
+@api_view(["POST"])
+@permission_classes([IsInstructor])
+def assign_task_to_interns(request, pk):
+    try:
+        task = Task.objects.get(pk=pk, instructor=request.user.instructorprofile)
+    except Task.DoesNotExist:
+        return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    permission_classes = [IsInstructor]
+    intern_ids = request.data.get("intern_ids", [])
 
-    def post(self, request, pk):
-        task = get_object_or_404(
-            Task, pk=pk, instructor=request.user.instructor_profile
+    if not isinstance(intern_ids, list):
+        return Response(
+            {"error": "intern_ids must be a list."}, status=status.HTTP_400_BAD_REQUEST
         )
-        intern_ids = request.data.get("intern_ids", [])
 
-        for intern_id in intern_ids:
-            intern = get_object_or_404(InternProfile, pk=intern_id)
-            TaskAssignment.objects.get_or_create(task=task, intern=intern)
+    assigned_count = 0
+    skipped_count = 0
+
+    for intern_id in intern_ids:
+        try:
+            intern = InternProfile.objects.get(
+                pk=intern_id, assigned_instructor=request.user.instructorprofile
+            )
+        except InternProfile.DoesNotExist:
+            skipped_count += 1
+            continue
+
+        assignment, created = TaskAssignment.objects.get_or_create(
+            task=task, intern=intern
+        )
+
+        if created:
+            assigned_count += 1
+
             Notification.objects.create(
                 user=intern.user,
-                type=Notification.Type.TASK_ASSIGNED,
+                type="TASK_ASSIGNED",
                 message=f"New task assigned: {task.title}",
             )
+        else:
+            skipped_count += 1
 
-        return Response(
-            {"success": True, "message": f"Task assigned to {len(intern_ids)} interns."}
+    return Response(
+        {
+            "success": True,
+            "message": f"Task assigned to {assigned_count} intern(s).",
+            "assigned_count": assigned_count,
+            "skipped_count": skipped_count,
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsInstructor])
+def instructor_reports(request):
+    instructor = request.user.instructorprofile
+    reports = Report.objects.filter(intern__assigned_instructor=instructor)
+    serializer = ReportSerializer(reports, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsInstructor])
+def review_report(request, pk):
+    try:
+        report = Report.objects.get(
+            pk=pk, intern__assigned_instructor=request.user.instructorprofile
         )
+    except Report.DoesNotExist:
+        return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    report.status = request.data.get("status", report.status)
+    report.instructor_feedback = request.data.get(
+        "instructor_feedback", report.instructor_feedback
+    )
+    report.save()
+
+    return Response({"success": True, "message": "Report reviewed"})
 
 
-class InstructorReportListView(generics.ListAPIView):
-    """GET /api/instructor/reports/ — Reports from my interns."""
-
-    permission_classes = [IsInstructor]
-    serializer_class = ReportSerializer
-
-    def get_queryset(self):
-        return Report.objects.filter(
-            intern__assigned_instructor=self.request.user.instructor_profile
-        )
-
-
-class InstructorReportDetailView(APIView):
-    """GET/PATCH /api/instructor/reports/<id>/ — Review + feedback."""
-
-    permission_classes = [IsInstructor]
-
-    def get(self, request, pk):
-        report = get_object_or_404(
-            Report, pk=pk, intern__assigned_instructor=request.user.instructor_profile
-        )
-        serializer = ReportSerializer(report)
-        return Response(serializer.data)
-
-    def patch(self, request, pk):
-        report = get_object_or_404(
-            Report, pk=pk, intern__assigned_instructor=request.user.instructor_profile
-        )
-        report.instructor_feedback = request.data.get(
-            "instructor_feedback", report.instructor_feedback
-        )
-        report.status = Report.Status.REVIEWED
-        report.save()
-        return Response({"success": True, "message": "Report reviewed."})
-
-
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 # INTERN VIEWS
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 
 
-class InternDashboardView(APIView):
-    """GET /api/intern/dashboard/"""
+@api_view(["GET"])
+@permission_classes([IsIntern])
+def intern_dashboard(request):
+    intern = request.user.internprofile
+    tasks = TaskAssignment.objects.filter(intern=intern, status="PENDING")
+    notifications = Notification.objects.filter(user=request.user, is_read=False)
 
-    permission_classes = [IsIntern]
+    return Response(
+        {
+            "schedule": (
+                InternScheduleSerializer(intern.internschedule_set.first()).data
+                if intern.internschedule_set.exists()
+                else None
+            ),
+            "pending_tasks": TaskAssignmentSerializer(tasks, many=True).data,
+            "unread_notifications": notifications.count(),
+        }
+    )
 
-    def get(self, request):
-        intern = request.user.intern_profile
-        pending_tasks = TaskAssignment.objects.filter(
-            intern=intern, status=TaskAssignment.Status.PENDING
-        ).count()
-        unread_notifications = Notification.objects.filter(
-            user=request.user, is_read=False
-        ).count()
 
-        return Response(
-            {
-                "pending_tasks": pending_tasks,
-                "unread_notifications": unread_notifications,
-                "status": intern.status,
-                "assigned_instructor": (
-                    intern.assigned_instructor.user.get_full_name()
-                    if intern.assigned_instructor
-                    else None
-                ),
-            }
+@api_view(["GET"])
+@permission_classes([IsIntern])
+def my_schedule(request):
+    intern = request.user.internprofile
+    schedules = intern.internschedule_set.all()
+    serializer = InternScheduleSerializer(schedules, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsIntern])
+def my_tasks(request):
+    intern = request.user.internprofile
+    assignments = TaskAssignment.objects.filter(intern=intern)
+    serializer = TaskAssignmentSerializer(assignments, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsIntern])
+def submit_task(request, pk):
+    try:
+        assignment = TaskAssignment.objects.get(
+            pk=pk, intern=request.user.internprofile
         )
+    except TaskAssignment.DoesNotExist:
+        return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    assignment.status = "SUBMITTED"
+    assignment.submitted_at = timezone.now()
+    assignment.save()
 
-class InternScheduleView(APIView):
-    """GET /api/intern/schedule/ — My current weekly schedule."""
+    Notification.objects.create(
+        user=assignment.task.instructor.user,
+        type="TASK_ASSIGNED",
+        message=f"{request.user.get_full_name()} submitted task: {assignment.task.title}",
+    )
 
-    permission_classes = [IsIntern]
-
-    def get(self, request):
-        schedules = InternSchedule.objects.filter(intern=request.user.intern_profile)
-        serializer = InternScheduleSerializer(schedules, many=True)
-        return Response(serializer.data)
-
-
-class InternTaskListView(generics.ListAPIView):
-    """GET /api/intern/tasks/ — My assigned tasks."""
-
-    permission_classes = [IsIntern]
-    serializer_class = TaskAssignmentSerializer
-
-    def get_queryset(self):
-        return TaskAssignment.objects.filter(intern=self.request.user.intern_profile)
-
-
-class SubmitTaskView(APIView):
-    """PATCH /api/intern/tasks/<id>/submit/"""
-
-    permission_classes = [IsIntern]
-
-    def patch(self, request, pk):
-        assignment = get_object_or_404(
-            TaskAssignment, pk=pk, intern=request.user.intern_profile
-        )
-        assignment.status = TaskAssignment.Status.SUBMITTED
-        assignment.submitted_at = timezone.now()
-        assignment.save()
-        return Response({"success": True, "message": "Task submitted."})
+    return Response({"success": True, "message": "Task submitted"})
 
 
 class InternReportListCreateView(generics.ListCreateAPIView):
-    """GET/POST /api/intern/reports/"""
-
-    permission_classes = [IsIntern]
     serializer_class = ReportSerializer
+    permission_classes = [IsIntern]
 
     def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.intern_profile)
+        return Report.objects.filter(intern=self.request.user.internprofile)
 
     def perform_create(self, serializer):
-        report = serializer.save(intern=self.request.user.intern_profile)
-        # Notify instructor
-        instructor = self.request.user.intern_profile.assigned_instructor
-        if instructor:
-            Notification.objects.create(
-                user=instructor.user,
-                type=Notification.Type.REPORT_SUBMITTED,
-                message=f"New report from {self.request.user.get_full_name()}: {report.title}",
-            )
+        report = serializer.save(intern=self.request.user.internprofile)
+        Notification.objects.create(
+            user=(
+                report.intern.assigned_instructor.user
+                if report.intern.assigned_instructor
+                else self.request.user
+            ),
+            type="REPORT_SUBMITTED",
+            message=f"New report from {self.request.user.get_full_name()}: {report.title}",
+        )
 
 
 class InternReportDetailView(generics.RetrieveAPIView):
-    """GET /api/intern/reports/<id>/"""
-
-    permission_classes = [IsIntern]
     serializer_class = ReportSerializer
+    permission_classes = [IsIntern]
 
     def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.intern_profile)
+        return Report.objects.filter(intern=self.request.user.internprofile)
 
 
-class InternProfileView(APIView):
-    """GET/PATCH /api/intern/profile/"""
-
-    permission_classes = [IsIntern]
-
-    def get(self, request):
-        serializer = InternProfileSerializer(request.user.intern_profile)
-        return Response(serializer.data)
-
-    def patch(self, request):
-        intern = request.user.intern_profile
-        serializer = InternProfileSerializer(intern, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 # SHARED VIEWS
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
 
 
 class NotificationListView(generics.ListAPIView):
-    """GET /api/notifications/ — My notifications."""
-
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
 
 
-class MarkNotificationReadView(APIView):
-    """PATCH /api/notifications/<id>/read/"""
+@api_view(["PATCH"])
+@permission_classes([permissions.IsAuthenticated])
+def mark_notification_read(request, pk):
+    try:
+        notification = Notification.objects.get(pk=pk, user=request.user)
+    except Notification.DoesNotExist:
+        return Response(
+            {"error": "Notification not found"}, status=status.HTTP_404_NOT_FOUND
+        )
 
-    permission_classes = [permissions.IsAuthenticated]
-
-    def patch(self, request, pk):
-        notification = get_object_or_404(Notification, pk=pk, user=request.user)
-        notification.is_read = True
-        notification.save()
-        return Response({"success": True})
+    notification.is_read = True
+    notification.save()
+    return Response({"success": True})
 
 
 class CourseListView(generics.ListAPIView):
-    """GET /api/courses/ — List available courses."""
-
-    permission_classes = [permissions.AllowAny]
-    serializer_class = CourseSerializer
     queryset = Course.objects.filter(is_active=True)
+    serializer_class = CourseSerializer
+    permission_classes = [permissions.AllowAny]
 
 
 class MessageListCreateView(generics.ListCreateAPIView):
-    """GET/POST /api/messages/"""
-
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = MessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Message.objects.filter(
-            Q(sender=self.request.user) | Q(recipient=self.request.user)
-        )
+        return Message.objects.filter(recipient=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(sender=self.request.user)
+        sender = self.request.user
+        recipient_id = self.request.data.get("recipient_id")
 
+        try:
+            recipient = User.objects.get(id=recipient_id)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Recipient not found")
 
-# ═══════════════════════════════════════════════════════════════
-# UTILITIES
-# ═══════════════════════════════════════════════════════════════
+        # Enforce messaging rules
+        if sender.role == "INTERN":
+            intern = sender.internprofile
+            allowed_recipients = [
+                (
+                    intern.assigned_instructor.user.id
+                    if intern.assigned_instructor
+                    else None
+                )
+            ]
+            # Also allow admin
+            admin_ids = list(
+                User.objects.filter(role="ADMIN").values_list("id", flat=True)
+            )
+            allowed_recipients.extend(admin_ids)
+
+            if recipient.id not in allowed_recipients:
+                raise serializers.ValidationError(
+                    "You can only message your instructor or admin"
+                )
+
+        serializer.save(sender=sender, recipient=recipient)
