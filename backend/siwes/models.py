@@ -25,6 +25,8 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=Role.choices)
     phone = models.CharField(max_length=20, blank=True)
+    gender = models.CharField(max_length=20, blank=True)
+    address = models.TextField(blank=True)
     profile_picture = models.ImageField(upload_to="profiles/", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

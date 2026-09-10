@@ -1,26 +1,22 @@
-"""
-SIWES App URL Routes
-All API endpoints mapped to their views.
-"""
-
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from . import views
+from .views import logout
 
 urlpatterns = [
-    # ─── AUTH ───────────────────────────────────────────────
-    path("auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    # Auth & Magic Links
     path("auth/register/", views.InternRegisterView.as_view(), name="intern-register"),
     path("auth/me/", views.MeView.as_view(), name="me"),
-    # ─── ADMIN ──────────────────────────────────────────────
     path(
-        "admin/dashboard/", views.AdminDashboardView.as_view(), name="admin-dashboard"
+        "auth/request-magic-link/", views.request_magic_link, name="request-magic-link"
     ),
+    path("auth/verify-magic-link/", views.verify_magic_link, name="verify-magic-link"),
+    path("auth/logout/", logout, name="logout"),
+    # Admin
+    path("admin/dashboard/", views.admin_dashboard, name="admin-dashboard"),
     path(
         "admin/interns/",
         views.AdminInternListCreateView.as_view(),
-        name="admin-intern-list",
+        name="admin-interns",
     ),
     path(
         "admin/interns/<uuid:pk>/",
@@ -29,41 +25,38 @@ urlpatterns = [
     ),
     path(
         "admin/interns/<uuid:pk>/assign-instructor/",
-        views.AssignInstructorView.as_view(),
+        views.assign_instructor,
         name="assign-instructor",
     ),
     path(
         "admin/interns/<uuid:pk>/set-dates/",
-        views.SetInternDatesView.as_view(),
+        views.set_intern_dates,
         name="set-intern-dates",
     ),
     path(
         "admin/instructors/",
         views.AdminInstructorListCreateView.as_view(),
-        name="admin-instructor-list",
+        name="admin-instructors",
     ),
     path(
         "admin/instructors/<uuid:pk>/",
         views.AdminInstructorDetailView.as_view(),
         name="admin-instructor-detail",
     ),
+    path(
+        "admin/schedules/",
+        views.AdminScheduleListCreateView.as_view(),
+        name="admin-schedules",
+    ),
     path("admin/reports/", views.AdminReportListView.as_view(), name="admin-reports"),
     path(
-        "admin/messages/broadcast/",
-        views.BroadcastMessageView.as_view(),
-        name="broadcast-message",
+        "admin/messages/broadcast/", views.broadcast_message, name="broadcast-message"
     ),
-    # ─── INSTRUCTOR ─────────────────────────────────────────
+    # Instructor
     path(
-        "instructor/dashboard/",
-        views.InstructorDashboardView.as_view(),
-        name="instructor-dashboard",
+        "instructor/dashboard/", views.instructor_dashboard, name="instructor-dashboard"
     ),
-    path(
-        "instructor/interns/",
-        views.InstructorInternListView.as_view(),
-        name="instructor-interns",
-    ),
+    path("instructor/interns/", views.my_interns, name="my-interns"),
     path(
         "instructor/tasks/",
         views.InstructorTaskListCreateView.as_view(),
@@ -76,34 +69,16 @@ urlpatterns = [
     ),
     path(
         "instructor/tasks/<uuid:pk>/assign/",
-        views.AssignTaskToInternsView.as_view(),
+        views.assign_task_to_interns,
         name="assign-task",
     ),
-    path(
-        "instructor/reports/",
-        views.InstructorReportListView.as_view(),
-        name="instructor-reports",
-    ),
-    path(
-        "instructor/reports/<uuid:pk>/",
-        views.InstructorReportDetailView.as_view(),
-        name="instructor-report-detail",
-    ),
-    # ─── INTERN ─────────────────────────────────────────────
-    path(
-        "intern/dashboard/",
-        views.InternDashboardView.as_view(),
-        name="intern-dashboard",
-    ),
-    path(
-        "intern/schedule/", views.InternScheduleView.as_view(), name="intern-schedule"
-    ),
-    path("intern/tasks/", views.InternTaskListView.as_view(), name="intern-tasks"),
-    path(
-        "intern/tasks/<uuid:pk>/submit/",
-        views.SubmitTaskView.as_view(),
-        name="submit-task",
-    ),
+    path("instructor/reports/", views.instructor_reports, name="instructor-reports"),
+    path("instructor/reports/<uuid:pk>/", views.review_report, name="review-report"),
+    # Intern
+    path("intern/dashboard/", views.intern_dashboard, name="intern-dashboard"),
+    path("intern/schedule/", views.my_schedule, name="my-schedule"),
+    path("intern/tasks/", views.my_tasks, name="my-tasks"),
+    path("intern/tasks/<uuid:pk>/submit/", views.submit_task, name="submit-task"),
     path(
         "intern/reports/",
         views.InternReportListCreateView.as_view(),
@@ -114,12 +89,11 @@ urlpatterns = [
         views.InternReportDetailView.as_view(),
         name="intern-report-detail",
     ),
-    path("intern/profile/", views.InternProfileView.as_view(), name="intern-profile"),
-    # ─── SHARED ─────────────────────────────────────────────
+    # Shared
     path("notifications/", views.NotificationListView.as_view(), name="notifications"),
     path(
         "notifications/<uuid:pk>/read/",
-        views.MarkNotificationReadView.as_view(),
+        views.mark_notification_read,
         name="mark-notification-read",
     ),
     path("courses/", views.CourseListView.as_view(), name="courses"),

@@ -134,6 +134,7 @@ AUTH_USER_MODEL = "siwes.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "siwes.authentication.CookieJWTAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -143,8 +144,15 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
 }
 
+# Magic link login token lifetime
+MAGIC_LINK_MAX_AGE = 60 * 120  # 2 hours in seconds
+
+# Session cookie settings
+ACCESS_COOKIE_NAME = "siwes_access"
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 12  # 12 hours in seconds
+
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=SESSION_COOKIE_MAX_AGE),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
 }
@@ -157,3 +165,23 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     "CORS_ALLOWED_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173"
 ).split(",")
+
+CORS_ALLOW_CREDENTIALS = True
+
+# ============================================================================
+# EMAIL CONFIGURATION
+# ============================================================================
+
+# Development: prints emails to console (terminal)
+EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@earlycode.local"
+FRONTEND_URL = "http://localhost:5173"
+
+# Production: uncomment and fill in your SMTP details
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'  # or your SMTP server
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'your-email@gmail.com'
+# EMAIL_HOST_PASSWORD = 'your-app-password'
+# DEFAULT_FROM_EMAIL = 'EarlyCode SIWES <noreply@earlycode.com>'

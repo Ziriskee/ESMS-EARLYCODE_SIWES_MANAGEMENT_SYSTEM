@@ -1,67 +1,121 @@
-import { Field, ErrorMessage, useFormikContext } from "formik";
-import type { FormValues } from "./RegisterForm";
+import { useState, useEffect } from "react";
+import { ErrorMessage, useFormikContext } from "formik";
 
-const courseOptions = [
-  "Web Development in React and Next JS",
-  "Web Design Masterclass [Tailwind CSS]",
-  "Python with Data Science",
-  "Python Bootcamp",
-  "Data Analytics",
-  "UI/UX and Prototype Design",
-  "Office Essentials Plus",
-  "Android and iOS Development",
-  "TypeScript Bootcamp",
-  "Cybersecurity Analyst",
-  "Cybersecurity [CC]",
-  "Office Essentials",
-];
+interface Course {
+  id: string;
+  course_name: string;
+  course_code?: string;
+  category?: string;
+  is_active: boolean;
+}
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
 export default function StepAdditional() {
-  const { values, setFieldValue } = useFormikContext<FormValues>();
+  const { values, errors, touched, setFieldValue } = useFormikContext<{
+    chosenCourses: string[];
+    whyIntern: string;
+    emergencyContact: string;
+    emergencyPhone: string;
+    declaration: string;
+  }>();
 
-  const toggleCourse = (course: string) => {
-    const current = values.chosenCourses;
-    if (current.includes(course)) {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [courseLoadError, setCourseLoadError] = useState("");
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/courses/`);
+        if (!response.ok) throw new Error("Could not load courses.");
+        const data = await response.json();
+
+        // Handle both: array or {results: [...]} (DRF pagination)
+        const courseList: Course[] = Array.isArray(data)
+          ? data
+          : data.results || [];
+
+        setCourses(courseList);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Could not load courses.";
+        setCourseLoadError(message);
+      } finally {
+        setLoadingCourses(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
+
+  const toggleCourse = (courseId: string) => {
+    const currentCourses: string[] = values.chosenCourses || [];
+    if (currentCourses.includes(courseId)) {
       setFieldValue(
         "chosenCourses",
-        current.filter((c) => c !== course),
+        currentCourses.filter((id) => id !== courseId),
       );
     } else {
-      setFieldValue("chosenCourses", [...current, course]);
+      setFieldValue("chosenCourses", [...currentCourses, courseId]);
     }
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      <h2 className="text-2xl font-bold mb-6 font-heading">
-        Additional Details
-      </h2>
-
+    <div className="space-y-8">
       {/* Chosen Courses - Multi Select */}
       <div className="space-y-3">
         <label className="text-sm text-ec-gold font-semibold font-body">
           Chosen Course For Internship *
         </label>
+
+        {loadingCourses && (
+          <p className="text-sm text-gray-400 font-body">Loading courses...</p>
+        )}
+
+        {courseLoadError && (
+          <p className="text-sm text-red-400 font-body">{courseLoadError}</p>
+        )}
+
+        {!loadingCourses && courses.length === 0 && !courseLoadError && (
+          <p className="text-sm text-gray-400 font-body">
+            No courses available. Please contact the admin.
+          </p>
+        )}
+
         <div className="grid sm:grid-cols-2 gap-3">
-          {courseOptions.map((course) => (
-            <label
-              key={course}
-              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                values.chosenCourses.includes(course)
-                  ? "border-ec-gold bg-ec-gold/10"
-                  : "border-white/10 hover:border-white/30"
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={values.chosenCourses.includes(course)}
-                onChange={() => toggleCourse(course)}
-                className="accent-ec-gold w-4 h-4 shrink-0"
-              />
-              <span className="text-white text-sm font-body">{course}</span>
-            </label>
-          ))}
+          {courses.map((course) => {
+            const selected = values.chosenCourses?.includes(course.id);
+            return (
+              <button
+                key={course.id}
+                type="button"
+                onClick={() => toggleCourse(course.id)}
+                className={`rounded-xl border p-4 text-left transition-all ${
+                  selected
+                    ? "border-ec-gold bg-ec-gold/10"
+                    : "border-white/10 bg-white/5 hover:border-white/30"
+                }`}
+              >
+                <p className="font-semibold text-white font-body">
+                  {course.course_name}
+                </p>
+                {course.course_code && (
+                  <p className="text-sm text-gray-400 font-body">
+                    {course.course_code}
+                  </p>
+                )}
+                {course.category && (
+                  <p className="text-sm text-gray-500 font-body">
+                    {course.category}
+                  </p>
+                )}
+              </button>
+            );
+          })}
         </div>
+
         <ErrorMessage
           name="chosenCourses"
           component="p"
@@ -72,102 +126,83 @@ export default function StepAdditional() {
       {/* Why Intern */}
       <div className="space-y-2">
         <label className="text-sm text-ec-gold font-semibold font-body">
-          Why do you want to intern at Early Code Ltd? *
+          Why do you want to intern with EarlyCode? *
         </label>
-        <Field
+        <textarea
           name="whyIntern"
-          as="textarea"
+          value={values.whyIntern}
+          onChange={(e) => setFieldValue("whyIntern", e.target.value)}
           rows={4}
-          placeholder="Tell us why you chose Early Code for your SIWES..."
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body resize-none"
+          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
+          placeholder="Tell us why you chose EarlyCode for your SIWES..."
         />
-        <ErrorMessage
-          name="whyIntern"
-          component="p"
-          className="text-red-400 text-sm font-body"
-        />
+        {errors.whyIntern && touched.whyIntern && (
+          <p className="text-sm text-red-400 font-body">{errors.whyIntern}</p>
+        )}
       </div>
 
       {/* Emergency Contact */}
       <div className="space-y-2">
         <label className="text-sm text-ec-gold font-semibold font-body">
-          Emergency Contact *
+          Emergency Contact Type *
         </label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Field
-              type="radio"
-              name="emergencyContact"
-              value="father"
-              className="accent-ec-gold w-4 h-4"
-            />
-            <span className="text-white font-body">Father</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Field
-              type="radio"
-              name="emergencyContact"
-              value="mother"
-              className="accent-ec-gold w-4 h-4"
-            />
-            <span className="text-white font-body">Mother</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Field
-              type="radio"
-              name="emergencyContact"
-              value="guardian"
-              className="accent-ec-gold w-4 h-4"
-            />
-            <span className="text-white font-body">Guardian</span>
-          </label>
-        </div>
-        <ErrorMessage
+        <select
           name="emergencyContact"
-          component="p"
-          className="text-red-400 text-sm font-body"
-        />
+          value={values.emergencyContact}
+          onChange={(e) => setFieldValue("emergencyContact", e.target.value)}
+          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white focus:border-[#FBCD15] focus:outline-none font-body"
+        >
+          <option value="">Select contact type</option>
+          <option value="parent">Parent</option>
+          <option value="guardian">Guardian</option>
+          <option value="sibling">Sibling</option>
+          <option value="spouse">Spouse</option>
+          <option value="friend">Friend</option>
+          <option value="other">Other</option>
+        </select>
+        {errors.emergencyContact && touched.emergencyContact && (
+          <p className="text-sm text-red-400 font-body">
+            {errors.emergencyContact}
+          </p>
+        )}
       </div>
 
       {/* Emergency Phone */}
       <div className="space-y-2">
         <label className="text-sm text-ec-gold font-semibold font-body">
-          Emergency Contact Phone Number *
+          Emergency Contact Phone *
         </label>
-        <Field
-          name="emergencyPhone"
+        <input
           type="tel"
-          placeholder="+234 801 234 5678"
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
-        />
-        <ErrorMessage
           name="emergencyPhone"
-          component="p"
-          className="text-red-400 text-sm font-body"
+          value={values.emergencyPhone}
+          onChange={(e) => setFieldValue("emergencyPhone", e.target.value)}
+          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
+          placeholder="+234 801 234 5678"
         />
+        {errors.emergencyPhone && touched.emergencyPhone && (
+          <p className="text-sm text-red-400 font-body">
+            {errors.emergencyPhone}
+          </p>
+        )}
       </div>
 
       {/* Declaration */}
       <div className="space-y-2">
         <label className="text-sm text-ec-gold font-semibold font-body">
-          Declaration [Name and Date] *
+          Declaration *
         </label>
-        <p className="text-gray-400 text-sm font-body">
-          "I hereby declare that the information provided above is true and I
-          agree to abide by the rules and regulations of Early Code Ltd upon
-          acceptance."
-        </p>
-        <Field
+        <textarea
           name="declaration"
-          type="text"
-          placeholder="Type your full name and today's date"
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
+          value={values.declaration}
+          onChange={(e) => setFieldValue("declaration", e.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
+          placeholder="I hereby declare that all information provided is true and accurate..."
         />
-        <ErrorMessage
-          name="declaration"
-          component="p"
-          className="text-red-400 text-sm font-body"
-        />
+        {errors.declaration && touched.declaration && (
+          <p className="text-sm text-red-400 font-body">{errors.declaration}</p>
+        )}
       </div>
     </div>
   );

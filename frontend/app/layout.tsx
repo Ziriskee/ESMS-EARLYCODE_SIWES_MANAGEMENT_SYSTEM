@@ -3,8 +3,12 @@ import { Routes, Route } from "react-router-dom";
 // Lazy load the register page for better performance
 import RegisterPage from "./register/page";
 import LandingPage from "./page";
-
-
+import LoginPage from "./login/page";
+import VerifyLogin from "./verify-login/page";
+import { AuthProvider } from "@/contexts/AuthProvider";
+import ProtectedRoute from "@/components/ProtectedRoute";
+// import { useAuth } from "@/contexts/useAuth";
+import DashboardPage from "./dashboard/page";
 
 function NotFoundPage() {
   return (
@@ -27,10 +31,22 @@ function NotFoundPage() {
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/verify-login" element={<VerifyLogin />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }

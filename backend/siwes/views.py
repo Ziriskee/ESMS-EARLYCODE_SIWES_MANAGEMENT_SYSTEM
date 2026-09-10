@@ -7,7 +7,7 @@ from rest_framework import generics, permissions, serializers, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.db import transaction
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import AccessToken
 from urllib.parse import quote
 
 from .models import (
@@ -196,21 +196,41 @@ def request_magic_link(request):
 
     return Response({"message": "If an account exists, a login link has been sent."})
 
+
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def verify_magic_link(request):
-    """User clicks magic link → Django verifies token, returns JWT."""
+    """
+    User clicks magic link → Django verifies token, sets httpOnly session cookie.
+    """
     token = request.query_params.get("token")
+
+    # ✅ TEMPORARY DEBUG: Print the raw token
+    print(f"\n🔍 RAW TOKEN: {token}")
+    print(f"🔍 TOKEN LENGTH: {len(token) if token else 0}")
+
     if not token:
         return Response(
             {"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        # Verify token (expires after 1 hour = 3600 seconds)
-        email = signer.unsign(token, max_age=3600)
+        print(f"🔍 ATTEMPTING TO UNSIGN: {token[:50]}...")
+        email = signer.unsign(token, max_age=settings.MAGIC_LINK_MAX_AGE)
+        print(f"✅ UNSIGN SUCCESS: {email}")
         user = User.objects.get(email=email)
-    except (SignatureExpired, BadSignature, User.DoesNotExist):
+    except SignatureExpired as e:
+        print(f"❌ SIGNATURE EXPIRED: {e}")
+        return Response(
+            {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    except BadSignature as e:
+        print(f"❌ BAD SIGNATURE: {e}")
+        return Response(
+            {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    except User.DoesNotExist as e:
+        print(f"❌ USER NOT FOUND: {e}")
         return Response(
             {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
         )
@@ -219,18 +239,28 @@ def verify_magic_link(request):
     user.last_login = timezone.now()
     user.save(update_fields=["last_login"])
 
-    # Generate JWT tokens
-    refresh = RefreshToken.for_user(user)
+    # Create 12-hour session token
+    access = AccessToken.for_user(user)
 
-    return Response(
+    response = Response(
         {
             "success": True,
             "message": "Login successful",
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
             "user": UserSerializer(user).data,
         }
     )
+
+    response.set_cookie(
+        key=settings.ACCESS_COOKIE_NAME,
+        value=str(access),
+        max_age=settings.SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax",
+        path="/",
+    )
+
+    return response
 
 
 class MeView(generics.RetrieveAPIView):
@@ -239,6 +269,28 @@ class MeView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def logout(request):
+    """
+    Deletes the session cookie.
+    """
+    response = Response(
+        {
+            "success": True,
+            "message": "Logged out successfully."
+        }
+    )
+
+    response.delete_cookie(
+        key=settings.ACCESS_COOKIE_NAME,
+        path="/",
+        samesite="Lax",
+    )
+
+    return response
 
 
 # ============================================================================
@@ -266,7 +318,6 @@ def admin_dashboard(request):
             "unread_reports": unread_reports,
         }
     )
-
 
 class AdminInternListCreateView(generics.ListCreateAPIView):
     queryset = InternProfile.objects.all()
@@ -382,7 +433,7 @@ def broadcast_message(request):
 @api_view(["GET"])
 @permission_classes([IsInstructor])
 def instructor_dashboard(request):
-    instructor = request.user.instructorprofile
+    instructor = request.user.instructor_profile
     my_interns = InternProfile.objects.filter(assigned_instructor=instructor)
     my_tasks = Task.objects.filter(instructor=instructor)
     pending_reports = Report.objects.filter(
@@ -401,7 +452,7 @@ def instructor_dashboard(request):
 @api_view(["GET"])
 @permission_classes([IsInstructor])
 def my_interns(request):
-    instructor = request.user.instructorprofile
+    instructor = request.user.instructor_profile
     interns = InternProfile.objects.filter(assigned_instructor=instructor)
     serializer = InternProfileSerializer(interns, many=True)
     return Response(serializer.data)
@@ -412,10 +463,10 @@ class InstructorTaskListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsInstructor]
 
     def get_queryset(self):
-        return Task.objects.filter(instructor=self.request.user.instructorprofile)
+        return Task.objects.filter(instructor=self.request.user.instructor_profile)
 
     def perform_create(self, serializer):
-        serializer.save(instructor=self.request.user.instructorprofile)
+        serializer.save(instructor=self.request.user.instructor_profile)
 
 
 class InstructorTaskDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -423,14 +474,14 @@ class InstructorTaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsInstructor]
 
     def get_queryset(self):
-        return Task.objects.filter(instructor=self.request.user.instructorprofile)
+        return Task.objects.filter(instructor=self.request.user.instructor_profile)
 
 
 @api_view(["POST"])
 @permission_classes([IsInstructor])
 def assign_task_to_interns(request, pk):
     try:
-        task = Task.objects.get(pk=pk, instructor=request.user.instructorprofile)
+        task = Task.objects.get(pk=pk, instructor=request.user.instructor_profile)
     except Task.DoesNotExist:
         return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -447,7 +498,7 @@ def assign_task_to_interns(request, pk):
     for intern_id in intern_ids:
         try:
             intern = InternProfile.objects.get(
-                pk=intern_id, assigned_instructor=request.user.instructorprofile
+                pk=intern_id, assigned_instructor=request.user.instructor_profile
             )
         except InternProfile.DoesNotExist:
             skipped_count += 1
@@ -481,7 +532,7 @@ def assign_task_to_interns(request, pk):
 @api_view(["GET"])
 @permission_classes([IsInstructor])
 def instructor_reports(request):
-    instructor = request.user.instructorprofile
+    instructor = request.user.instructor_profile
     reports = Report.objects.filter(intern__assigned_instructor=instructor)
     serializer = ReportSerializer(reports, many=True)
     return Response(serializer.data)
@@ -492,7 +543,7 @@ def instructor_reports(request):
 def review_report(request, pk):
     try:
         report = Report.objects.get(
-            pk=pk, intern__assigned_instructor=request.user.instructorprofile
+            pk=pk, intern__assigned_instructor=request.user.instructor_profile
         )
     except Report.DoesNotExist:
         return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -514,17 +565,18 @@ def review_report(request, pk):
 @api_view(["GET"])
 @permission_classes([IsIntern])
 def intern_dashboard(request):
-    intern = request.user.internprofile
+    intern = request.user.intern_profile
     tasks = TaskAssignment.objects.filter(intern=intern, status="PENDING")
     notifications = Notification.objects.filter(user=request.user, is_read=False)
 
+    # ✅ FIXED: Use 'schedules' instead of 'internschedule_set'
+    schedule = None
+    if intern.schedules.exists():
+        schedule = intern.schedules.first()
+
     return Response(
         {
-            "schedule": (
-                InternScheduleSerializer(intern.internschedule_set.first()).data
-                if intern.internschedule_set.exists()
-                else None
-            ),
+            "schedule": InternScheduleSerializer(schedule).data if schedule else None,
             "pending_tasks": TaskAssignmentSerializer(tasks, many=True).data,
             "unread_notifications": notifications.count(),
         }
@@ -534,8 +586,8 @@ def intern_dashboard(request):
 @api_view(["GET"])
 @permission_classes([IsIntern])
 def my_schedule(request):
-    intern = request.user.internprofile
-    schedules = intern.internschedule_set.all()
+    intern = request.user.intern_profile
+    schedules = intern.schedule.all()
     serializer = InternScheduleSerializer(schedules, many=True)
     return Response(serializer.data)
 
@@ -543,7 +595,7 @@ def my_schedule(request):
 @api_view(["GET"])
 @permission_classes([IsIntern])
 def my_tasks(request):
-    intern = request.user.internprofile
+    intern = request.user.intern_profile
     assignments = TaskAssignment.objects.filter(intern=intern)
     serializer = TaskAssignmentSerializer(assignments, many=True)
     return Response(serializer.data)
@@ -554,7 +606,7 @@ def my_tasks(request):
 def submit_task(request, pk):
     try:
         assignment = TaskAssignment.objects.get(
-            pk=pk, intern=request.user.internprofile
+            pk=pk, intern=request.user.intern_profile
         )
     except TaskAssignment.DoesNotExist:
         return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -577,10 +629,10 @@ class InternReportListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsIntern]
 
     def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.internprofile)
+        return Report.objects.filter(intern=self.request.user.intern_profile)
 
     def perform_create(self, serializer):
-        report = serializer.save(intern=self.request.user.internprofile)
+        report = serializer.save(intern=self.request.user.intern_profile)
         Notification.objects.create(
             user=(
                 report.intern.assigned_instructor.user
@@ -597,7 +649,7 @@ class InternReportDetailView(generics.RetrieveAPIView):
     permission_classes = [IsIntern]
 
     def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.internprofile)
+        return Report.objects.filter(intern=self.request.user.intern_profile)
 
 
 # ============================================================================
@@ -652,7 +704,7 @@ class MessageListCreateView(generics.ListCreateAPIView):
 
         # Enforce messaging rules
         if sender.role == "INTERN":
-            intern = sender.internprofile
+            intern = sender.intern_profile
             allowed_recipients = [
                 (
                     intern.assigned_instructor.user.id

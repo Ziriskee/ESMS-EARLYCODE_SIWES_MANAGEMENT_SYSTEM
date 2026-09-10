@@ -4,6 +4,7 @@ import * as Yup from "yup";
 import StepPersonal from "./StepPersonal";
 import StepSchool from "./StepSchool";
 import StepAdditional from "./StepAdditional";
+import { useNavigate } from "react-router-dom";
 
 export interface FormValues {
   // Step 1: Personal
@@ -109,7 +110,10 @@ const step2Schema = Yup.object({
 });
 
 const step3Schema = Yup.object({
-  chosenCourses: Yup.array().min(1, "Select at least one course"),
+  chosenCourses: Yup.array()
+    .of(Yup.string().required())
+    .min(1, "Select at least one course")
+    .required("Select at least one course"),
   whyIntern: Yup.string().required("This field is required"),
   emergencyContact: Yup.string().required("Emergency contact is required"),
   emergencyPhone: Yup.string().required("Emergency phone is required"),
@@ -146,7 +150,12 @@ export default function RegisterForm() {
   const saved = getSavedData();
   const [currentStep, setCurrentStep] = useState(saved?.step ?? 1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [draftRestored, setDraftRestored] = useState(!!saved);
+  const [draftRestored] = useState(!!saved);
+  const navigate = useNavigate();
+  const [submitStatus, setSubmitStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const initialValues = saved?.values ?? defaultInitialValues;
 
@@ -174,18 +183,77 @@ export default function RegisterForm() {
 
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
-    console.log("Submitting:", values);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    setSubmitStatus(null);
 
-    // Clear saved draft on successful submit
-    localStorage.removeItem(STORAGE_KEY_DATA);
-    localStorage.removeItem(STORAGE_KEY_STEP);
+    try {
+      const [firstName, ...rest] = values.fullName.trim().split(" ");
+      const lastName = rest.join(" ") || "";
 
-    setIsSubmitting(false);
-    setDraftRestored(false);
-    alert("Application submitted successfully!");
+      const payload = {
+        email: values.email,
+        first_name: firstName,
+        last_name: lastName,
+        phone: values.phone,
+        role: "INTERN",
+        gender: values.gender,
+        address: values.address,
+        state_of_origin: values.stateOfOrigin,
+        preferred_campus: values.preferredCampus,
+        current_institution: values.currentInstitution,
+        institution_address: values.institutionAddress,
+        course_of_study: values.courseOfStudy,
+        current_level: values.currentLevel,
+        matric_number: values.matricNumber,
+        school_start_date: values.internshipStartDate,
+        org_end_date: values.internshipEndDate,
+        internship_duration: values.internshipDuration,
+        other_duration: values.otherDuration,
+        why_intern: values.whyIntern,
+        emergency_contact_type: values.emergencyContact,
+        emergency_phone: values.emergencyPhone,
+        declaration: values.declaration,
+        chosen_courses: values.chosenCourses,
+      };
+
+      const response = await fetch("http://localhost:8000/api/auth/register/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMsg =
+          data.detail ||
+          data.message ||
+          (typeof data === "object"
+            ? JSON.stringify(data)
+            : "Registration failed");
+        throw new Error(errorMsg);
+      }
+
+      setSubmitStatus({
+        type: "success",
+        message: "Registration successful! Check your email for a login link.",
+      });
+      localStorage.removeItem(STORAGE_KEY_DATA);
+      localStorage.removeItem(STORAGE_KEY_STEP);
+
+      setTimeout(() => {
+        navigate("/login")
+      }, 3000);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.";
+      setSubmitStatus({ type: "error", message });
+      setIsSubmitting(false);
+    } 
   };
-
   const clearDraft = () => {
     localStorage.removeItem(STORAGE_KEY_DATA);
     localStorage.removeItem(STORAGE_KEY_STEP);
@@ -258,6 +326,41 @@ export default function RegisterForm() {
             </button>
           </div>
         )}
+
+        {/* Submit Status Banner */}
+        {submitStatus && (
+          <div
+            className={`mb-6 p-4 rounded-xl border flex items-center gap-3 animate-fadeIn ${
+              submitStatus.type === "success"
+                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                : "border-red-500/30 bg-red-500/10 text-red-400"
+            }`}
+          >
+            <svg
+              className="w-5 h-5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              {submitStatus.type === "success" ? (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              ) : (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              )}
+            </svg>
+            <span className="text-sm font-body">{submitStatus.message}</span>
+          </div>
+        )}  
 
         {/* Progress Bar */}
         <div className="mb-12">

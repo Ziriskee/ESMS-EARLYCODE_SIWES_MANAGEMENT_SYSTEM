@@ -23,21 +23,24 @@ from .models import (
 
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
+class UserAdmin(admin.ModelAdmin):
     list_display = [
         "email",
         "first_name",
         "last_name",
         "role",
+        "gender",
         "is_active",
-        "created_at",
-    ]
-    list_filter = ["role", "is_active", "created_at"]
+    ]  # ← added gender
+    list_filter = ["role", "is_active", "gender"]  # ← added gender
     search_fields = ["email", "first_name", "last_name"]
-    ordering = ["-created_at"]
-
-    fieldsets = BaseUserAdmin.fieldsets + (
-        ("SIWES Info", {"fields": ("role", "phone", "profile_picture")}),
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        (
+            "Personal info",
+            {"fields": ("first_name", "last_name", "phone", "gender", "address")},
+        ),  # ← added
+        ("Permissions", {"fields": ("role", "is_active", "is_staff", "is_superuser")}),
     )
 
 
