@@ -92,6 +92,11 @@ urlpatterns = [
     # Shared
     path("notifications/", views.NotificationListView.as_view(), name="notifications"),
     path(
+        "notifications/mark-all-read/",
+        views.mark_all_notifications_read,
+        name="mark-all-notifications-read",
+    ),
+    path(
         "notifications/<uuid:pk>/read/",
         views.mark_notification_read,
         name="mark-notification-read",

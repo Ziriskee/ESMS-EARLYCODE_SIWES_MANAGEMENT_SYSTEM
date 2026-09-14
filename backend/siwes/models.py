@@ -351,6 +351,7 @@ class Report(models.Model):
     """Reports submitted by interns."""
 
     class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
         SUBMITTED = "SUBMITTED", "Submitted"
         REVIEWED = "REVIEWED", "Reviewed"
 

@@ -9,6 +9,11 @@ import { AuthProvider } from "@/contexts/AuthProvider";
 import ProtectedRoute from "@/components/ProtectedRoute";
 // import { useAuth } from "@/contexts/useAuth";
 import DashboardPage from "./dashboard/page";
+import { InternLayout } from "./dashboard/intern/layout";
+import InternOverviewPage from "./dashboard/intern/page";
+import InternReportsPage from "./dashboard/intern/reports/page";
+import InternMessagesPage from "./dashboard/intern/messages/page";
+import InternNotificationsPage from "./dashboard/intern/notifications/page";
 
 function NotFoundPage() {
   return (
@@ -46,6 +51,19 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/dashboard/intern"
+          element={
+            <ProtectedRoute>
+              <InternLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<InternOverviewPage />} />
+          <Route path="reports" element={<InternReportsPage />} />
+          <Route path="messages" element={<InternMessagesPage />} />
+          <Route path="notifications" element={<InternNotificationsPage />} />
+        </Route>
       </Routes>
     </AuthProvider>
   );

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from django.db import transaction
 from rest_framework_simplejwt.tokens import AccessToken
 from urllib.parse import quote
+from datetime import timedelta
 
 from .models import (
     User,
@@ -24,6 +25,7 @@ from .models import (
     Notification,
 )
 from .serializers import (
+    RecentReportSerializer,
     UserSerializer,
     InstructorProfileSerializer,
     InternProfileSerializer,
@@ -565,20 +567,139 @@ def review_report(request, pk):
 @api_view(["GET"])
 @permission_classes([IsIntern])
 def intern_dashboard(request):
-    intern = request.user.intern_profile
-    tasks = TaskAssignment.objects.filter(intern=intern, status="PENDING")
-    notifications = Notification.objects.filter(user=request.user, is_read=False)
+    """
+    Returns everything the intern Overview page needs in one call:
+    user info, placement progress, stats, recent reports, and
+    upcoming on-site days.
+    """
+    user = request.user
+    intern = user.intern_profile
 
-    # ✅ FIXED: Use 'schedules' instead of 'internschedule_set'
-    schedule = None
-    if intern.schedules.exists():
-        schedule = intern.schedules.first()
+    today = timezone.now().date()
+    start = intern.org_start_date
+    end = intern.org_end_date
 
+    # ---------- Placement (nullable) ----------
+    placement = None
+    if start and end and end > start:
+        total_days = (end - start).days
+        total_weeks = max(total_days // 7, 1)
+
+        elapsed_days = max((today - start).days, 0)
+        weeks_completed = min(elapsed_days // 7, total_weeks)
+        weeks_remaining = max(total_weeks - weeks_completed, 0)
+
+        days_remaining = max((end - today).days, 0)
+        percent_complete = round(weeks_completed / total_weeks * 100)
+
+        placement = {
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "total_weeks": total_weeks,
+            "weeks_completed": weeks_completed,
+            "weeks_remaining": weeks_remaining,
+            "days_remaining": days_remaining,
+            "percent_complete": percent_complete,
+        }
+
+    # ---------- Stats ----------
+    reports_qs = Report.objects.filter(intern=intern)
+    reports_submitted = reports_qs.count()
+
+    task_qs = TaskAssignment.objects.filter(intern=intern)
+    tasks_pending = task_qs.filter(status=TaskAssignment.Status.PENDING).count()
+    tasks_completed = (
+        task_qs.filter(status=TaskAssignment.Status.SUBMITTED).count()
+        + task_qs.filter(status=TaskAssignment.Status.REVIEWED).count()
+    )
+
+    unread_messages = Message.objects.filter(recipient=user, is_read=False).count()
+
+    unread_notifications = Notification.objects.filter(user=user, is_read=False).count()
+
+    # ---------- Recent reports (up to 4) ----------
+    recent_reports = reports_qs.order_by("-submitted_at")[:4]
+
+    # ---------- Upcoming on-site days (next 35 days) ----------
+    attendance_has_schedule = False
+    upcoming_days = []
+
+    schedules = InternSchedule.objects.filter(intern=intern).select_related(
+        "slot", "slot__rotation_pair"
+    )
+    if schedules.exists():
+        attendance_has_schedule = True
+        window_end = today + timedelta(days=35)
+
+        day_map = {
+            "MON": 0,
+            "TUE": 1,
+            "WED": 2,
+            "THU": 3,
+            "FRI": 4,
+            "SAT": 5,
+            "SUN": 6,
+        }
+
+        # Rotation anchors to org_start_date.
+        # If missing, we fall back to no rotation.
+        anchor = start  # start = intern.org_start_date, already defined above
+
+        for sched in schedules:
+            base_slot = sched.slot
+            paired_slot = base_slot.rotation_pair
+
+            target_weekday = day_map.get(base_slot.day_of_week)
+            if target_weekday is None:
+                continue
+
+            days_ahead = (target_weekday - today.weekday()) % 7
+            first_date = today + timedelta(days=days_ahead)
+
+            d = first_date
+            while d <= window_end:
+                # Choose slot for this date.
+                # Rule: even weeks since anchor = base slot,
+                #       odd weeks since anchor = paired slot (if it exists).
+                active_slot = base_slot
+
+                if anchor and paired_slot:
+                    weeks_since_start = (d - anchor).days // 7
+                    if weeks_since_start % 2 == 1:
+                        active_slot = paired_slot
+
+                upcoming_days.append(
+                    {
+                        "date": d.isoformat(),
+                        "shift": active_slot.shift,
+                        "start_time": active_slot.start_time.strftime("%H:%M"),
+                        "end_time": active_slot.end_time.strftime("%H:%M"),
+                    }
+                )
+                d += timedelta(days=7)
+
+        upcoming_days.sort(key=lambda x: x["date"])
+    # ---------- Assemble response ----------
     return Response(
         {
-            "schedule": InternScheduleSerializer(schedule).data if schedule else None,
-            "pending_tasks": TaskAssignmentSerializer(tasks, many=True).data,
-            "unread_notifications": notifications.count(),
+            "user": {
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "role": user.role,
+            },
+            "placement": placement,
+            "stats": {
+                "reports_submitted": reports_submitted,
+                "tasks_pending": tasks_pending,
+                "tasks_completed": tasks_completed,
+                "unread_messages": unread_messages,
+                "unread_notifications": unread_notifications,
+            },
+            "recent_reports": RecentReportSerializer(recent_reports, many=True).data,
+            "attendance": {
+                "has_schedule": attendance_has_schedule,
+                "upcoming_days": upcoming_days,
+            },
         }
     )
 
@@ -629,19 +750,27 @@ class InternReportListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsIntern]
 
     def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.intern_profile)
+        return Report.objects.filter(intern=self.request.user.intern_profile).order_by(
+            "-submitted_at"
+        )
 
     def perform_create(self, serializer):
         report = serializer.save(intern=self.request.user.intern_profile)
-        Notification.objects.create(
-            user=(
-                report.intern.assigned_instructor.user
-                if report.intern.assigned_instructor
-                else self.request.user
-            ),
-            type="REPORT_SUBMITTED",
-            message=f"New report from {self.request.user.get_full_name()}: {report.title}",
-        )
+
+        # Only notify the instructor when the report is actually submitted,
+        # not when it is saved as a draft.
+        if report.status == Report.Status.SUBMITTED:
+            instructor = report.intern.assigned_instructor
+            if instructor:
+                Notification.objects.create(
+                    user=instructor.user,
+                    type="REPORT_SUBMITTED",
+                    message=(
+                        f"New report from "
+                        f"{self.request.user.get_full_name()}: "
+                        f"{report.title}"
+                    ),
+                )
 
 
 class InternReportDetailView(generics.RetrieveAPIView):
@@ -679,6 +808,22 @@ def mark_notification_read(request, pk):
     notification.save()
     return Response({"success": True})
 
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def mark_all_notifications_read(request):
+    """
+    Marks every unread notification for the current user as read.
+    """
+    updated = Notification.objects.filter(
+        user=request.user, is_read=False
+    ).update(is_read=True)
+
+    return Response(
+        {
+            "success": True,
+            "updated": updated,
+        }
+    )
 
 class CourseListView(generics.ListAPIView):
     queryset = Course.objects.filter(is_active=True)
