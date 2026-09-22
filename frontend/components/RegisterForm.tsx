@@ -61,18 +61,36 @@ const defaultInitialValues: FormValues = {
 
 const STORAGE_KEY_DATA = "siwes_form_data";
 const STORAGE_KEY_STEP = "siwes_form_step";
+const STORAGE_KEY_SCHEMA_VERSION = "siwes_form_schema_version";
+const STORAGE_SCHEMA_VERSION = 2;
+
+function clearSavedDraft() {
+  localStorage.removeItem(STORAGE_KEY_DATA);
+  localStorage.removeItem(STORAGE_KEY_STEP);
+  localStorage.removeItem(STORAGE_KEY_SCHEMA_VERSION);
+}
 
 function getSavedData(): { values: FormValues; step: number } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_DATA);
     const stepRaw = localStorage.getItem(STORAGE_KEY_STEP);
+    const versionRaw = localStorage.getItem(STORAGE_KEY_SCHEMA_VERSION);
+
     if (!raw) return null;
+
+    if (versionRaw !== String(STORAGE_SCHEMA_VERSION)) {
+      clearSavedDraft();
+      return null;
+    }
+
     const parsed = JSON.parse(raw);
+
     return {
       values: { ...defaultInitialValues, ...parsed },
       step: stepRaw ? parseInt(stepRaw, 10) : 1,
     };
   } catch {
+    clearSavedDraft();
     return null;
   }
 }
@@ -111,7 +129,13 @@ const step2Schema = Yup.object({
 
 const step3Schema = Yup.object({
   chosenCourses: Yup.array()
-    .of(Yup.string().required())
+    .of(
+      Yup.string()
+        .uuid("Course selection is invalid. Refresh and select courses again.")
+        .required(
+          "Course selection is invalid. Refresh and select courses again.",
+        ),
+    )
     .min(1, "Select at least one course")
     .required("Select at least one course"),
   whyIntern: Yup.string().required("This field is required"),
@@ -137,6 +161,10 @@ function AutoSave({
     timeoutRef.current = setTimeout(() => {
       localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(values));
       localStorage.setItem(STORAGE_KEY_STEP, String(currentStep));
+      localStorage.setItem(
+        STORAGE_KEY_SCHEMA_VERSION,
+        String(STORAGE_SCHEMA_VERSION),
+      );
     }, 500);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -205,7 +233,7 @@ export default function RegisterForm() {
         current_level: values.currentLevel,
         matric_number: values.matricNumber,
         school_start_date: values.internshipStartDate,
-        org_end_date: values.internshipEndDate,
+        school_end_date: values.internshipEndDate,
         internship_duration: values.internshipDuration,
         other_duration: values.otherDuration,
         why_intern: values.whyIntern,
@@ -239,11 +267,10 @@ export default function RegisterForm() {
         type: "success",
         message: "Registration successful! Check your email for a login link.",
       });
-      localStorage.removeItem(STORAGE_KEY_DATA);
-      localStorage.removeItem(STORAGE_KEY_STEP);
+      clearSavedDraft();
 
       setTimeout(() => {
-        navigate("/login")
+        navigate("/login");
       }, 3000);
     } catch (error) {
       const message =
@@ -252,11 +279,11 @@ export default function RegisterForm() {
           : "Something went wrong. Please try again.";
       setSubmitStatus({ type: "error", message });
       setIsSubmitting(false);
-    } 
+    }
   };
+
   const clearDraft = () => {
-    localStorage.removeItem(STORAGE_KEY_DATA);
-    localStorage.removeItem(STORAGE_KEY_STEP);
+    clearSavedDraft();
     window.location.reload();
   };
 
@@ -281,7 +308,7 @@ export default function RegisterForm() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="max-w-4xl mx-auto px-3 md:px-6 py-12">
         {/* Title */}
         <div className="text-center mb-10">
           <span className="text-ec-gold text-sm font-semibold tracking-widest uppercase mb-4 block font-body">
@@ -298,7 +325,7 @@ export default function RegisterForm() {
 
         {/* Draft Restored Banner */}
         {draftRestored && (
-          <div className="mb-6 p-4 rounded-xl border border-ec-gold/30 bg-ec-gold/10 flex items-center justify-between animate-fadeIn">
+          <div className="mb-6 p-4 rounded-xl border border-ec-gold/30 bg-ec-gold/10 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <svg
                 className="w-5 h-5 text-ec-gold shrink-0"
@@ -319,6 +346,7 @@ export default function RegisterForm() {
               </span>
             </div>
             <button
+              type="button"
               onClick={clearDraft}
               className="text-xs text-gray-400 hover:text-white underline font-body shrink-0 ml-4"
             >
@@ -330,7 +358,7 @@ export default function RegisterForm() {
         {/* Submit Status Banner */}
         {submitStatus && (
           <div
-            className={`mb-6 p-4 rounded-xl border flex items-center gap-3 animate-fadeIn ${
+            className={`mb-6 p-4 rounded-xl border flex items-center gap-3 ${
               submitStatus.type === "success"
                 ? "border-green-500/30 bg-green-500/10 text-green-400"
                 : "border-red-500/30 bg-red-500/10 text-red-400"
@@ -360,7 +388,7 @@ export default function RegisterForm() {
             </svg>
             <span className="text-sm font-body">{submitStatus.message}</span>
           </div>
-        )}  
+        )}
 
         {/* Progress Bar */}
         <div className="mb-12">
@@ -412,7 +440,7 @@ export default function RegisterForm() {
             <Form>
               <AutoSave values={values} currentStep={currentStep} />
 
-              <div className="p-8 md:p-10 rounded-3xl border border-white/10 bg-white/5">
+              <div className="p-6 md:p-10 rounded-3xl border border-white/10 bg-white/5">
                 {currentStep === 1 && <StepPersonal />}
                 {currentStep === 2 && <StepSchool />}
                 {currentStep === 3 && <StepAdditional />}
@@ -433,7 +461,7 @@ export default function RegisterForm() {
                   </button>
 
                   <span className="text-sm text-gray-500 font-body">
-                    Step {currentStep} of {steps.length}
+                    {currentStep} of {steps.length}
                   </span>
 
                   {currentStep < 3 ? (
@@ -448,7 +476,7 @@ export default function RegisterForm() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="px-8 py-3 bg-ec-gold text-ec-dark rounded-full font-bold text-sm hover:scale-105 hover:shadow-lg hover:shadow-ec-gold/20 transition-all duration-300 font-body flex items-center gap-2"
+                      className="px-1 py-3 bg-ec-gold text-ec-dark rounded-full font-bold text-sm hover:scale-105 hover:shadow-lg hover:shadow-ec-gold/20 transition-all duration-300 font-body flex items-center justify-center gap-2 w-25"
                     >
                       {isSubmitting ? (
                         <>
@@ -474,7 +502,7 @@ export default function RegisterForm() {
                           Submitting...
                         </>
                       ) : (
-                        "Submit Application"
+                        "Submit"
                       )}
                     </button>
                   )}

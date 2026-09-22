@@ -75,7 +75,7 @@ class AssignTaskToInternsRegressionTests(TestCase):
         self.instructor_user.is_authenticated = True
         self.instructor_user.is_instructor = True
         self.instructor_user.role = "INSTRUCTOR"
-        self.instructor_user.instructorprofile = Mock()
+        self.instructor_user.instructor_profile = Mock()
 
         self.task = Mock()
         self.task.title = "Test Task"
@@ -119,12 +119,12 @@ class AssignTaskToInternsRegressionTests(TestCase):
 
         mock_task_get.assert_called_once_with(
             pk="task-id",
-            instructor=self.instructor_user.instructorprofile,
+            instructor=self.instructor_user.instructor_profile,
         )
 
         mock_intern_get.assert_called_once_with(
             pk="11111111-1111-1111-1111-111111111111",
-            assigned_instructor=self.instructor_user.instructorprofile,
+            assigned_instructor=self.instructor_user.instructor_profile,
         )
 
         mock_get_or_create.assert_called_once_with(

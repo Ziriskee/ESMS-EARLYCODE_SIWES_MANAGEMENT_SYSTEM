@@ -19,7 +19,14 @@ from .models import (
     Report,
     Message,
     Notification,
+    InternDocument,
 )
+
+
+def admin_users_only():
+    """Returns a queryset of only Admin users — for FK dropdowns that should
+    offer only admins as choices."""
+    return User.objects.filter(role=User.Role.ADMIN)
 
 
 @admin.register(User)
@@ -63,8 +70,8 @@ class InternProfileAdmin(admin.ModelAdmin):
         "full_name",
         "assigned_instructor",
         "status",
-        "org_start_date",
-        "org_end_date",
+        "school_start_date",
+        "school_end_date",
     ]
     list_filter = ["status", "preferred_campus", "current_level"]
     search_fields = [
@@ -78,9 +85,9 @@ class InternProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ["course_name", "course_code", "category", "is_active"]
+    list_display = ["course_name", "course_code", "duration", "is_active"]
     search_fields = ["course_name", "course_code"]
-    list_filter = ["category", "is_active"]
+    list_filter = ["duration", "is_active"]
 
 
 @admin.register(InternCourse)
@@ -101,6 +108,11 @@ class InternScheduleAdmin(admin.ModelAdmin):
     list_display = ["intern", "slot", "is_rotating", "assigned_by", "assigned_at"]
     list_filter = ["is_rotating", "slot__day_of_week"]
     search_fields = ["intern__user__email", "intern__user__first_name"]
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "assigned_by":
+            kwargs["queryset"] = admin_users_only()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(Task)
@@ -139,3 +151,25 @@ class NotificationAdmin(admin.ModelAdmin):
     list_filter = ["type", "is_read"]
     search_fields = ["user__email", "message"]
     date_hierarchy = "created_at"
+
+
+@admin.register(InternDocument)
+class InternDocumentAdmin(admin.ModelAdmin):
+    list_display = ["intern", "type", "uploaded_at", "uploaded_by"]
+    list_filter = ["type", "uploaded_at"]
+    search_fields = [
+        "intern__user__email",
+        "intern__user__first_name",
+        "intern__user__last_name",
+    ]
+    readonly_fields = ["id", "uploaded_at"]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "uploaded_by":
+            kwargs["queryset"] = admin_users_only()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request).select_related("intern__user", "uploaded_by")
+        )

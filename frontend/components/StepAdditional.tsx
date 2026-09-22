@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { ErrorMessage, useFormikContext } from "formik";
+import MultiSelect from "./MultiSelect";
 
 interface Course {
   id: string;
   course_name: string;
   course_code?: string;
-  category?: string;
+  duration?: string;
   is_active: boolean;
 }
 
@@ -32,7 +33,6 @@ export default function StepAdditional() {
         if (!response.ok) throw new Error("Could not load courses.");
         const data = await response.json();
 
-        // Handle both: array or {results: [...]} (DRF pagination)
         const courseList: Course[] = Array.isArray(data)
           ? data
           : data.results || [];
@@ -50,71 +50,32 @@ export default function StepAdditional() {
     fetchCourses();
   }, []);
 
-  const toggleCourse = (courseId: string) => {
-    const currentCourses: string[] = values.chosenCourses || [];
-    if (currentCourses.includes(courseId)) {
-      setFieldValue(
-        "chosenCourses",
-        currentCourses.filter((id) => id !== courseId),
-      );
-    } else {
-      setFieldValue("chosenCourses", [...currentCourses, courseId]);
-    }
-  };
-
   return (
     <div className="space-y-8">
-      {/* Chosen Courses - Multi Select */}
+      {/* Chosen Courses — MultiSelect dropdown */}
       <div className="space-y-3">
         <label className="text-sm text-ec-gold font-semibold font-body">
           Chosen Course For Internship *
         </label>
 
-        {loadingCourses && (
+        {loadingCourses ? (
           <p className="text-sm text-gray-400 font-body">Loading courses...</p>
-        )}
-
-        {courseLoadError && (
+        ) : courseLoadError ? (
           <p className="text-sm text-red-400 font-body">{courseLoadError}</p>
+        ) : (
+          <MultiSelect
+            options={courses.map((c) => ({
+              value: c.id,
+              label: c.course_name,
+              sublabel: c.course_code,
+              timeframe: c.duration,
+            }))}
+            values={values.chosenCourses || []}
+            onChange={(next) => setFieldValue("chosenCourses", next)}
+            placeholder="Select course(s)"
+            emptyMessage="No courses available. Please contact the admin."
+          />
         )}
-
-        {!loadingCourses && courses.length === 0 && !courseLoadError && (
-          <p className="text-sm text-gray-400 font-body">
-            No courses available. Please contact the admin.
-          </p>
-        )}
-
-        <div className="grid sm:grid-cols-2 gap-3">
-          {courses.map((course) => {
-            const selected = values.chosenCourses?.includes(course.id);
-            return (
-              <button
-                key={course.id}
-                type="button"
-                onClick={() => toggleCourse(course.id)}
-                className={`rounded-xl border p-4 text-left transition-all ${
-                  selected
-                    ? "border-ec-gold bg-ec-gold/10"
-                    : "border-white/10 bg-white/5 hover:border-white/30"
-                }`}
-              >
-                <p className="font-semibold text-white font-body">
-                  {course.course_name}
-                </p>
-                {course.course_code && (
-                  <p className="text-sm text-gray-400 font-body">
-                    {course.course_code}
-                  </p>
-                )}
-                {course.category && (
-                  <p className="text-sm text-gray-500 font-body">
-                    {course.category}
-                  </p>
-                )}
-              </button>
-            );
-          })}
-        </div>
 
         <ErrorMessage
           name="chosenCourses"
@@ -133,7 +94,7 @@ export default function StepAdditional() {
           value={values.whyIntern}
           onChange={(e) => setFieldValue("whyIntern", e.target.value)}
           rows={4}
-          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body resize-none"
           placeholder="Tell us why you chose EarlyCode for your SIWES..."
         />
         {errors.whyIntern && touched.whyIntern && (
@@ -150,15 +111,29 @@ export default function StepAdditional() {
           name="emergencyContact"
           value={values.emergencyContact}
           onChange={(e) => setFieldValue("emergencyContact", e.target.value)}
-          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white focus:border-[#FBCD15] focus:outline-none font-body"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body appearance-none"
         >
-          <option value="">Select contact type</option>
-          <option value="parent">Parent</option>
-          <option value="guardian">Guardian</option>
-          <option value="sibling">Sibling</option>
-          <option value="spouse">Spouse</option>
-          <option value="friend">Friend</option>
-          <option value="other">Other</option>
+          <option value="" className="bg-ec-dark">
+            Select contact type
+          </option>
+          <option value="parent" className="bg-ec-dark">
+            Parent
+          </option>
+          <option value="guardian" className="bg-ec-dark">
+            Guardian
+          </option>
+          <option value="sibling" className="bg-ec-dark">
+            Sibling
+          </option>
+          <option value="spouse" className="bg-ec-dark">
+            Spouse
+          </option>
+          <option value="friend" className="bg-ec-dark">
+            Friend
+          </option>
+          <option value="other" className="bg-ec-dark">
+            Other
+          </option>
         </select>
         {errors.emergencyContact && touched.emergencyContact && (
           <p className="text-sm text-red-400 font-body">
@@ -175,9 +150,10 @@ export default function StepAdditional() {
         <input
           type="tel"
           name="emergencyPhone"
+          autoComplete="tel"
           value={values.emergencyPhone}
           onChange={(e) => setFieldValue("emergencyPhone", e.target.value)}
-          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
           placeholder="+234 801 234 5678"
         />
         {errors.emergencyPhone && touched.emergencyPhone && (
@@ -197,7 +173,7 @@ export default function StepAdditional() {
           value={values.declaration}
           onChange={(e) => setFieldValue("declaration", e.target.value)}
           rows={3}
-          className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body resize-none"
           placeholder="I hereby declare that all information provided is true and accurate..."
         />
         {errors.declaration && touched.declaration && (

@@ -1,32 +1,53 @@
 import { Field, ErrorMessage, useFormikContext } from "formik";
 import type { FormValues } from "./RegisterForm";
 
+const CAMPUSES = [
+  { value: "kubwa", label: "Kubwa Campus" },
+  { value: "nyanya", label: "Nyanya Campus" },
+];
+
+const DURATIONS = [
+  { value: "1-month", label: "1 Month" },
+  { value: "2-months", label: "2 Months" },
+  { value: "3-months", label: "3 Months" },
+  { value: "4-months", label: "4 Months" },
+  { value: "5-months", label: "5 Months" },
+  { value: "6-months", label: "6 Months" },
+  { value: "other", label: "Other" },
+];
+
 export default function StepSchool() {
   const { values } = useFormikContext<FormValues>();
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6">
       <h2 className="text-2xl font-bold mb-6 font-heading">
         School Information
       </h2>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Preferred Campus */}
-        <div className="space-y-2">
+        {/* Preferred Campus — pill grid */}
+        <div className="space-y-2 md:col-span-2">
           <label className="text-sm text-ec-gold font-semibold font-body">
             Preferred Early Code Campus *
           </label>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <Field
-                type="radio"
-                name="preferredCampus"
-                value="kubwa"
-                className="accent-ec-gold w-4 h-4"
-              />
-              <span className="text-white font-body">Kubwa Campus</span>
-            </label>
-            
+          <div className="grid grid-cols-2 gap-3">
+            {CAMPUSES.map((campus) => (
+              <label
+                key={campus.value}
+                className="flex items-center gap-2 cursor-pointer p-3 rounded-xl border border-white/10 hover:border-ec-gold/50 transition-colors"
+              >
+                <Field
+                  type="radio"
+                  name="preferredCampus"
+                  value={campus.value}
+                  className="accent-ec-gold w-4 h-4"
+                />
+                <span className="text-white text-sm font-body">
+                  {campus.label}
+                </span>
+              </label>
+            ))}
           </div>
           <ErrorMessage
             name="preferredCampus"
@@ -43,6 +64,7 @@ export default function StepSchool() {
           <Field
             name="currentInstitution"
             type="text"
+            autoComplete="organization"
             placeholder="University of Lagos"
             className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
           />
@@ -54,13 +76,14 @@ export default function StepSchool() {
         </div>
 
         {/* Institution Address */}
-        <div className="space-y-2 md:col-span-2">
+        <div className="space-y-2">
           <label className="text-sm text-ec-gold font-semibold font-body">
             Institution's Address *
           </label>
           <Field
             name="institutionAddress"
             type="text"
+            autoComplete="street-address"
             placeholder="Full address of your institution"
             className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
           />
@@ -177,61 +200,51 @@ export default function StepSchool() {
           />
         </div>
 
-        {/* Internship Duration */}
-        <div className="space-y-2 md:col-span-2">
+        {/* Internship Duration — beside End Date */}
+        <div className="space-y-2">
           <label className="text-sm text-ec-gold font-semibold font-body">
             Internship Duration *
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              "1 Month",
-              "2 Months",
-              "3 Months",
-              "4 Months",
-              "5 Months",
-              "6 Months",
-              "Other",
-            ].map((dur) => (
-              <label
-                key={dur}
-                className="flex items-center gap-2 cursor-pointer p-3 rounded-xl border border-white/10 hover:border-ec-gold/50 transition-colors"
-              >
-                <Field
-                  type="radio"
-                  name="internshipDuration"
-                  value={dur.toLowerCase().replace(" ", "-")}
-                  className="accent-ec-gold w-4 h-4"
-                />
-                <span className="text-white text-sm font-body">{dur}</span>
-              </label>
+          <Field
+            name="internshipDuration"
+            as="select"
+            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body appearance-none"
+          >
+            <option value="" className="bg-ec-dark">
+              Select Duration
+            </option>
+            {DURATIONS.map((d) => (
+              <option key={d.value} value={d.value} className="bg-ec-dark">
+                {d.label}
+              </option>
             ))}
-          </div>
+          </Field>
           <ErrorMessage
             name="internshipDuration"
             component="p"
             className="text-red-400 text-sm font-body"
           />
-
-          {/* Conditional Other Duration Input */}
-          {values.internshipDuration === "other" && (
-            <div className="mt-4 animate-fadeIn">
-              <label className="text-sm text-ec-gold font-semibold font-body">
-                Specify Duration *
-              </label>
-              <Field
-                name="otherDuration"
-                type="text"
-                placeholder="e.g., 8 Months, 1 Year"
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
-              />
-              <ErrorMessage
-                name="otherDuration"
-                component="p"
-                className="text-red-400 text-sm font-body mt-1"
-              />
-            </div>
-          )}
         </div>
+
+        {/* Conditional "Other" duration input — full width under the row */}
+        {values.internshipDuration === "other" && (
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm text-ec-gold font-semibold font-body">
+              Specify Duration *
+            </label>
+            <Field
+              name="otherDuration"
+              type="text"
+              placeholder="e.g., 8 Months, 1 Year"
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:border-ec-gold focus:outline-none focus:ring-1 focus:ring-ec-gold transition-colors font-body"
+            />
+            <ErrorMessage
+              name="otherDuration"
+              component="p"
+              className="text-red-400 text-sm font-body"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

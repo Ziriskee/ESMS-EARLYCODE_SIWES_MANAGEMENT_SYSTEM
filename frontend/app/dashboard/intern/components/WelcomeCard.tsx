@@ -2,6 +2,7 @@ import { Card } from "../../shared/ui/Card";
 
 type WelcomeCardProps = {
   firstName: string;
+  lastName?: string;
   weeksCompleted: number | null;
   totalWeeks: number | null;
 };

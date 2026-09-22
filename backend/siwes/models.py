@@ -5,8 +5,15 @@ Backend: Django + Django REST Framework + PostgreSQL
 
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
+from django.core.exceptions import ValidationError
+
+
+def validate_pdf(value):
+    """Reject anything that isn't a PDF."""
+    if not value.name.lower().endswith(".pdf"):
+        raise ValidationError("Only PDF files are allowed.")
+
 
 # ───────────────────────────────────────────────────────────────
 # 1. BASE USER MODEL
@@ -106,7 +113,7 @@ class Course(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     course_name = models.CharField(max_length=200)
     course_code = models.CharField(max_length=20, blank=True)
-    category = models.CharField(max_length=100, blank=True)
+    duration = models.CharField(max_length=100, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -147,14 +154,9 @@ class InternProfile(models.Model):
         related_name="assigned_interns",
     )
 
-    # Three dates as discussed
-    school_start_date = models.DateField(null=True, blank=True)  # Date 1: From school
-    org_start_date = models.DateField(
-        null=True, blank=True
-    )  # Date 2: Official start at org
-    org_end_date = models.DateField(
-        null=True, blank=True
-    )  # Date 3: Official end at org
+    # Two dates: the school-defined start and end of the placement.
+    school_start_date = models.DateField(null=True, blank=True)
+    school_end_date = models.DateField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
@@ -185,6 +187,46 @@ class InternProfile(models.Model):
     @property
     def full_name(self):
         return self.user.get_full_name()
+
+
+# ───────────────────────────────────────────────────────────────
+# 5b. INTERN DOCUMENTS
+# ───────────────────────────────────────────────────────────────
+
+
+class InternDocument(models.Model):
+    """A document attached to an intern (code of conduct, acceptance letter, etc.)."""
+
+    class Type(models.TextChoices):
+        CODE_OF_CONDUCT = "CODE_OF_CONDUCT", "Code of Conduct"
+        ACCEPTANCE_LETTER = "ACCEPTANCE_LETTER", "Acceptance Letter"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    intern = models.ForeignKey(
+        InternProfile,
+        on_delete=models.CASCADE,
+        related_name="documents",
+    )
+    type = models.CharField(max_length=30, choices=Type.choices)
+    file = models.FileField(
+        upload_to="intern_documents/",
+        validators=[validate_pdf],
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_documents",
+    )
+
+    class Meta:
+        unique_together = ["intern", "type"]
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return f"{self.get_type_display()} — {self.intern.full_name}"
 
 
 # ───────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ Serializers convert Django model instances to JSON for the React frontend.
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import (
+    InternDocument,
     User,
     AdminProfile,
     InstructorProfile,
@@ -84,7 +85,7 @@ class InternRegisterSerializer(serializers.Serializer):
     current_level = serializers.CharField(required=False, allow_blank=True)
     matric_number = serializers.CharField(required=False, allow_blank=True)
     school_start_date = serializers.DateField(required=False, allow_null=True)
-    org_end_date = serializers.DateField(required=False, allow_null=True)
+    school_end_date = serializers.DateField(required=False, allow_null=True)
     internship_duration = serializers.CharField(required=False, allow_blank=True)
     other_duration = serializers.CharField(required=False, allow_blank=True)
     why_intern = serializers.CharField(required=False, allow_blank=True)
@@ -153,8 +154,8 @@ class InternProfileSerializer(serializers.ModelSerializer):
             "assigned_instructor",
             "status",
             "school_start_date",
-            "org_start_date",
-            "org_end_date",
+            "school_start_date",
+            "school_end_date",
             "state_of_origin",
             "preferred_campus",
             "current_institution",
@@ -175,6 +176,65 @@ class InternProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
 
+class InternDocumentSerializer(serializers.ModelSerializer):
+    """
+    Read serializer for intern documents. Used by the intern dashboard
+    and by the admin to list what's already been sent.
+    """
+
+    type_display = serializers.CharField(source="get_type_display", read_only=True)
+    file_url = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InternDocument
+        fields = [
+            "id",
+            "type",
+            "type_display",
+           
+            "file_url",
+            "uploaded_at",
+            "uploaded_by",
+            "uploaded_by_name",
+        ]
+        read_only_fields = [
+            "id",
+            "uploaded_at",
+            "uploaded_by",
+            "uploaded_by_name",
+            "type_display",
+            "file_url",
+        ]
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        if obj.file and request:
+            return request.build_absolute_uri(obj.file.url)
+        return None
+
+    def get_uploaded_by_name(self, obj):
+        if not obj.uploaded_by:
+            return None
+        return obj.uploaded_by.get_full_name() or obj.uploaded_by.email
+
+
+class InternDocumentUploadSerializer(serializers.Serializer):
+    """
+    Write serializer for admin uploads. Accepts either:
+    - A single file with a `type` field, or
+    - Two files (code_of_conduct + acceptance_letter) at once.
+    """
+
+    code_of_conduct = serializers.FileField(required=False)
+    acceptance_letter = serializers.FileField(required=False)
+
+    def validate(self, attrs):
+        if not attrs.get("code_of_conduct") and not attrs.get("acceptance_letter"):
+            raise serializers.ValidationError("At least one document must be provided.")
+        return attrs
+
+
 # ───────────────────────────────────────────────────────────────
 # COURSE SERIALIZERS
 # ───────────────────────────────────────────────────────────────
@@ -183,7 +243,7 @@ class InternProfileSerializer(serializers.ModelSerializer):
 class CourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
-        fields = ["id", "course_name", "course_code", "category", "is_active"]
+        fields = ["id", "course_name", "course_code", "duration", "is_active"]
 
 
 # ───────────────────────────────────────────────────────────────

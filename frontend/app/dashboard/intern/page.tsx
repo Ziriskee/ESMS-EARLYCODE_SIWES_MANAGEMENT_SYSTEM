@@ -39,6 +39,7 @@ export default function InternOverviewPage() {
     <div className="space-y-8 pt-2">
       <WelcomeCard
         firstName={user.first_name || "there"}
+        lastName={user.last_name || ""}
         weeksCompleted={placement?.weeks_completed ?? null}
         totalWeeks={placement?.total_weeks ?? null}
       />

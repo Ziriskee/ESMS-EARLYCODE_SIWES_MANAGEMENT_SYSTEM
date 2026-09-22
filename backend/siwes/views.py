@@ -10,8 +10,12 @@ from django.db import transaction
 from rest_framework_simplejwt.tokens import AccessToken
 from urllib.parse import quote
 from datetime import timedelta
+from django.core.files.base import (
+    ContentFile,
+)  
 
 from .models import (
+    InternDocument,
     User,
     InstructorProfile,
     InternProfile,
@@ -25,6 +29,8 @@ from .models import (
     Notification,
 )
 from .serializers import (
+    InternDocumentSerializer,
+    InternDocumentUploadSerializer,
     RecentReportSerializer,
     UserSerializer,
     InstructorProfileSerializer,
@@ -97,7 +103,7 @@ class InternRegisterView(generics.CreateAPIView):
                 current_level=serializer.validated_data.get("current_level", ""),
                 matric_number=serializer.validated_data.get("matric_number", ""),
                 school_start_date=serializer.validated_data.get("school_start_date"),
-                org_end_date=serializer.validated_data.get("org_end_date"),
+                school_end_date=serializer.validated_data.get("school_end_date"),
                 internship_duration=serializer.validated_data.get(
                     "internship_duration", ""
                 ),
@@ -279,12 +285,7 @@ def logout(request):
     """
     Deletes the session cookie.
     """
-    response = Response(
-        {
-            "success": True,
-            "message": "Logged out successfully."
-        }
-    )
+    response = Response({"success": True, "message": "Logged out successfully."})
 
     response.delete_cookie(
         key=settings.ACCESS_COOKIE_NAME,
@@ -320,6 +321,373 @@ def admin_dashboard(request):
             "unread_reports": unread_reports,
         }
     )
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_pending_interns(request):
+    """
+    Returns a list of interns awaiting review (status = PENDING),
+    each with a short summary of their submission.
+    """
+    pending = (
+        InternProfile.objects
+        .filter(
+            status=InternProfile.Status.PENDING,
+            user__is_active=True,
+        )
+        .select_related("user", "assigned_instructor__user")
+        .order_by("-created_at")
+    )
+
+    data = []
+    for intern in pending:
+        user = intern.user
+        data.append({
+            "id": str(intern.id),
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "gender": user.gender,
+            },
+            "preferred_campus": intern.preferred_campus,
+            "current_institution": intern.current_institution,
+            "course_of_study": intern.course_of_study,
+            "current_level": intern.current_level,
+            "school_start_date": intern.school_start_date,
+            "school_end_date": intern.school_end_date,
+            "internship_duration": intern.internship_duration,
+            "created_at": intern.created_at,
+        })
+
+    return Response({
+        "count": len(data),
+        "results": data,
+    })
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_intern_submission(request, pk):
+    """
+    Returns the full submission details for a single intern (any status),
+    used by the admin review modal.
+    """
+    try:
+        intern = (
+            InternProfile.objects
+            .select_related("user", "assigned_instructor__user")
+            .get(pk=pk)
+        )
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    user = intern.user
+
+    # Courses the intern selected during registration
+    courses = [
+        {
+            "id": str(ic.course.id),
+            "course_name": ic.course.course_name,
+            "course_code": ic.course.course_code,
+            "duration": ic.course.duration,
+        }
+        for ic in intern.courses.select_related("course").all()
+    ]
+
+    # Documents already sent to this intern (usually none while pending)
+    documents = InternDocumentSerializer(
+        intern.documents.all(),
+        many=True,
+        context={"request": request},
+    ).data
+
+    return Response({
+        "id": str(intern.id),
+        "status": intern.status,
+        "created_at": intern.created_at,
+        "updated_at": intern.updated_at,
+
+        # User fields
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "gender": user.gender,
+            "address": user.address,
+            "is_active": user.is_active,
+        },
+
+        # Placement / academic fields
+        "state_of_origin": intern.state_of_origin,
+        "preferred_campus": intern.preferred_campus,
+        "current_institution": intern.current_institution,
+        "institution_address": intern.institution_address,
+        "course_of_study": intern.course_of_study,
+        "current_level": intern.current_level,
+        "matric_number": intern.matric_number,
+        "internship_duration": intern.internship_duration,
+        "other_duration": intern.other_duration,
+        "school_start_date": intern.school_start_date,
+        "school_end_date": intern.school_end_date,
+
+        # Narrative
+        "why_intern": intern.why_intern,
+        "emergency_contact_type": intern.emergency_contact_type,
+        "emergency_phone": intern.emergency_phone,
+        "declaration": intern.declaration,
+
+        # Relations
+        "courses": courses,
+        "assigned_instructor": (
+            {
+                "id": str(intern.assigned_instructor.id),
+                "name": intern.assigned_instructor.user.get_full_name(),
+                "email": intern.assigned_instructor.user.email,
+            }
+            if intern.assigned_instructor
+            else None
+        ),
+        "documents": documents,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_accept_intern(request, pk):
+    """
+    Accept a pending intern. Sets status to ACTIVE and reactivates the user
+    if they were previously soft-deleted. Sends a notification.
+    """
+    try:
+        intern = InternProfile.objects.select_related("user").get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if intern.status == InternProfile.Status.ACTIVE:
+        return Response(
+            {"error": "Intern is already active."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        intern.status = InternProfile.Status.ACTIVE
+        intern.save(update_fields=["status"])
+
+        # If the user had been soft-deleted by a previous rejection,
+        # restore access.
+        user = intern.user
+        if not user.is_active:
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+
+        Notification.objects.create(
+            user=user,
+            type=Notification.Type.INSTRUCTOR_ASSIGNED,
+            message=(
+                "Your registration has been accepted. "
+                "You will receive your acceptance letter and code of conduct "
+                "shortly."
+            ),
+        )
+
+    return Response({
+        "success": True,
+        "message": "Intern accepted.",
+        "intern": {
+            "id": str(intern.id),
+            "status": intern.status,
+            "user_id": str(user.id),
+        },
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_reject_intern(request, pk):
+    """
+    Reject a pending intern. Soft-deletes the user (is_active = False) so
+    they cannot log in. The InternProfile and its data are preserved for
+    record-keeping.
+    """
+    try:
+        intern = InternProfile.objects.select_related("user").get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not intern.user.is_active:
+        return Response(
+            {"error": "This intern has already been rejected."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        user = intern.user
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+
+    return Response({
+        "success": True,
+        "message": "Intern rejected.",
+        "intern": {
+            "id": str(intern.id),
+            "status": intern.status,
+            "user_id": str(user.id),
+            "is_active": user.is_active,
+        },
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_upload_documents(request, pk):
+    """
+    Upload one or both PDF documents for an intern.
+    Replaces any existing document of the same type.
+
+    Accepts multipart/form-data with optional fields:
+      - code_of_conduct
+      - acceptance_letter
+    """
+    try:
+        intern = InternProfile.objects.select_related("user").get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = InternDocumentUploadSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    uploaded_types = []
+
+    with transaction.atomic():
+        if serializer.validated_data.get("code_of_conduct"):
+            _upsert_intern_document(
+                intern=intern,
+                doc_type=InternDocument.Type.CODE_OF_CONDUCT,
+                file=serializer.validated_data["code_of_conduct"],
+                uploaded_by=request.user,
+            )
+            uploaded_types.append("CODE_OF_CONDUCT")
+
+        if serializer.validated_data.get("acceptance_letter"):
+            _upsert_intern_document(
+                intern=intern,
+                doc_type=InternDocument.Type.ACCEPTANCE_LETTER,
+                file=serializer.validated_data["acceptance_letter"],
+                uploaded_by=request.user,
+            )
+            uploaded_types.append("ACCEPTANCE_LETTER")
+
+    documents = InternDocumentSerializer(
+        intern.documents.all(),
+        many=True,
+        context={"request": request},
+    ).data
+
+    # Send notification email outside the transaction so a mail failure
+    # never rolls back a successful upload.
+    try:
+        _send_documents_email(intern, uploaded_types)
+    except Exception as email_error:
+        # Log but don't fail the request. Upload already succeeded.
+        print(f"Documents email failed: {email_error}")
+
+    return Response(
+        {
+            "success": True,
+            "message": "Documents uploaded.",
+            "uploaded": uploaded_types,
+            "documents": documents,
+        }
+    )
+
+
+def _upsert_intern_document(intern, doc_type, file, uploaded_by):
+    """
+    Creates or replaces an InternDocument of the given type for the given intern.
+    If a document of that type already exists, its old file is deleted from
+    storage before the new file is saved.
+    """
+    existing = InternDocument.objects.filter(intern=intern, type=doc_type).first()
+
+    if existing:
+        # Delete the old file from disk to avoid orphan files.
+        if existing.file:
+            existing.file.delete(save=False)
+
+        existing.file = file
+        existing.uploaded_by = uploaded_by
+        existing.save(update_fields=["file", "uploaded_by"])
+    else:
+        InternDocument.objects.create(
+            intern=intern,
+            type=doc_type,
+            file=file,
+            uploaded_by=uploaded_by,
+        )
+
+
+def _send_documents_email(intern, uploaded_types):
+    """
+    Sends the intern an email letting them know new documents are available.
+    """
+    if not uploaded_types:
+        return
+
+    user = intern.user
+    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+    portal_url = f"{frontend_url}/dashboard/intern"
+
+    # Friendly labels for the types that were uploaded
+    type_labels = {
+        "CODE_OF_CONDUCT": "Code of Conduct",
+        "ACCEPTANCE_LETTER": "Acceptance Letter",
+    }
+    labels = [type_labels.get(t, t) for t in uploaded_types]
+
+    if len(labels) == 1:
+        subject_what = labels[0]
+    else:
+        subject_what = " and ".join(labels)
+
+    subject = "Your SIWES documents are ready"
+
+    greeting = user.first_name or "there"
+
+    message = (
+        f"Hi {greeting},\n\n"
+        f"Your {subject_what} ha"
+        f"{'s' if len(labels) == 1 else 've'} been uploaded "
+        f"to your SIWES portal.\n\n"
+        f"Log in to download:\n{portal_url}\n\n"
+        f"— Early Code Team"
+    )
+
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=from_email,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
 
 class AdminInternListCreateView(generics.ListCreateAPIView):
     queryset = InternProfile.objects.all()
@@ -374,8 +742,12 @@ def set_intern_dates(request, pk):
     except InternProfile.DoesNotExist:
         return Response({"error": "Intern not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    intern.org_start_date = request.data.get("org_start_date") or intern.org_start_date
-    intern.org_end_date = request.data.get("org_end_date") or intern.org_end_date
+    intern.school_start_date = (
+        request.data.get("school_start_date") or intern.school_start_date
+    )
+    intern.school_end_date = (
+        request.data.get("school_end_date") or intern.school_end_date
+    )
     intern.status = request.data.get("status", intern.status)
     intern.save()
 
@@ -576,8 +948,8 @@ def intern_dashboard(request):
     intern = user.intern_profile
 
     today = timezone.now().date()
-    start = intern.org_start_date
-    end = intern.org_end_date
+    start = intern.school_start_date
+    end = intern.school_end_date
 
     # ---------- Placement (nullable) ----------
     placement = None
@@ -641,9 +1013,9 @@ def intern_dashboard(request):
             "SUN": 6,
         }
 
-        # Rotation anchors to org_start_date.
+        # Rotation anchors to school_start_date.
         # If missing, we fall back to no rotation.
-        anchor = start  # start = intern.org_start_date, already defined above
+        anchor = start  # start = intern.school_start_date, already defined above
 
         for sched in schedules:
             base_slot = sched.slot
@@ -700,6 +1072,29 @@ def intern_dashboard(request):
                 "has_schedule": attendance_has_schedule,
                 "upcoming_days": upcoming_days,
             },
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsIntern])
+def my_documents(request):
+    """
+    Returns all documents uploaded for the currently authenticated intern.
+    """
+    intern = request.user.intern_profile
+    documents = intern.documents.all()
+
+    serializer = InternDocumentSerializer(
+        documents,
+        many=True,
+        context={"request": request},
+    )
+
+    return Response(
+        {
+            "count": documents.count(),
+            "results": serializer.data,
         }
     )
 
@@ -808,15 +1203,16 @@ def mark_notification_read(request, pk):
     notification.save()
     return Response({"success": True})
 
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def mark_all_notifications_read(request):
     """
     Marks every unread notification for the current user as read.
     """
-    updated = Notification.objects.filter(
-        user=request.user, is_read=False
-    ).update(is_read=True)
+    updated = Notification.objects.filter(user=request.user, is_read=False).update(
+        is_read=True
+    )
 
     return Response(
         {
@@ -824,6 +1220,7 @@ def mark_all_notifications_read(request):
             "updated": updated,
         }
     )
+
 
 class CourseListView(generics.ListAPIView):
     queryset = Course.objects.filter(is_active=True)

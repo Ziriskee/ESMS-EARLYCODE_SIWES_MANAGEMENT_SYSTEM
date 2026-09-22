@@ -14,6 +14,31 @@ urlpatterns = [
     # Admin
     path("admin/dashboard/", views.admin_dashboard, name="admin-dashboard"),
     path(
+        "admin/interns/pending/",
+        views.admin_pending_interns,
+        name="admin-pending-interns",
+    ),
+    path(
+        "admin/interns/<pk>/submission/",
+        views.admin_intern_submission,
+        name="admin-intern-submission",
+    ),
+    path(
+        "admin/interns/<pk>/accept/",
+        views.admin_accept_intern,
+        name="admin-accept-intern",
+    ),
+    path(
+        "admin/interns/<pk>/reject/",
+        views.admin_reject_intern,
+        name="admin-reject-intern",
+    ),
+    path(
+        "admin/interns/<pk>/documents/",
+        views.admin_upload_documents,
+        name="admin-upload-documents",
+    ),
+    path(
         "admin/interns/",
         views.AdminInternListCreateView.as_view(),
         name="admin-interns",
@@ -76,6 +101,7 @@ urlpatterns = [
     path("instructor/reports/<uuid:pk>/", views.review_report, name="review-report"),
     # Intern
     path("intern/dashboard/", views.intern_dashboard, name="intern-dashboard"),
+    path("intern/documents/", views.my_documents, name="my-documents"),
     path("intern/schedule/", views.my_schedule, name="my-schedule"),
     path("intern/tasks/", views.my_tasks, name="my-tasks"),
     path("intern/tasks/<uuid:pk>/submit/", views.submit_task, name="submit-task"),
