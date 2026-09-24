@@ -7,6 +7,7 @@ type SidebarNavItemProps = {
   icon: LucideIcon;
   badge?: number;
   collapsed: boolean;
+  onNavigate?: () => void;
 };
 
 export function SidebarNavItem({
@@ -15,6 +16,7 @@ export function SidebarNavItem({
   icon: Icon,
   badge,
   collapsed,
+  onNavigate,
 }: SidebarNavItemProps) {
   const location = useLocation();
   const isActive = location.pathname === to;
@@ -30,6 +32,7 @@ export function SidebarNavItem({
   return (
     <Link
       to={to}
+      onClick={onNavigate}
       aria-current={isActive ? "page" : undefined}
       className={`${baseClasses} ${layoutClasses}`}
       style={{

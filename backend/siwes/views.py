@@ -10,12 +10,13 @@ from django.db import transaction
 from rest_framework_simplejwt.tokens import AccessToken
 from urllib.parse import quote
 from datetime import timedelta
-from django.core.files.base import (
-    ContentFile,
-)  
+from django.core.files.base import (ContentFile,)  
+from rest_framework.exceptions import NotFound
+from rest_framework.pagination import PageNumberPagination
 
 from .models import (
     InternDocument,
+    ScheduleSlot,
     User,
     InstructorProfile,
     InternProfile,
@@ -29,9 +30,15 @@ from .models import (
     Notification,
 )
 from .serializers import (
+    AdminInstructorSerializer,
+    AdminInternListSerializer,
+    InstructorCreateSerializer,
+    InstructorUpdateSerializer,
     InternDocumentSerializer,
     InternDocumentUploadSerializer,
+    PlacementConfigSerializer,
     RecentReportSerializer,
+    SubmissionEditSerializer,
     UserSerializer,
     InstructorProfileSerializer,
     InternProfileSerializer,
@@ -122,7 +129,9 @@ class InternRegisterView(generics.CreateAPIView):
                 InternCourse.objects.create(intern=intern, course=course)
 
         # Send welcome email with magic link (outside transaction)
-        self._send_welcome_email(user)
+        self._send_welcome_email(user) 
+        # Notify all admins a new registration awaits review
+        self._notify_admins(user, intern)
 
         return Response(
             {
@@ -165,7 +174,9 @@ class InternRegisterView(generics.CreateAPIView):
 @permission_classes([permissions.AllowAny])
 def request_magic_link(request):
     """User enters email → Django sends magic link."""
-    email = request.data.get("email")
+    raw_email = request.data.get("email", "")
+    email = raw_email.strip().lower()
+
     if not email:
         return Response(
             {"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
@@ -226,7 +237,7 @@ def verify_magic_link(request):
         print(f"🔍 ATTEMPTING TO UNSIGN: {token[:50]}...")
         email = signer.unsign(token, max_age=settings.MAGIC_LINK_MAX_AGE)
         print(f"✅ UNSIGN SUCCESS: {email}")
-        user = User.objects.get(email=email)
+        user = User.objects.get(email__iexact=email.strip().lower())
     except SignatureExpired as e:
         print(f"❌ SIGNATURE EXPIRED: {e}")
         return Response(
@@ -367,7 +378,8 @@ def admin_pending_interns(request):
         "results": data,
     })
 
-@api_view(["GET"])
+
+@api_view(["GET", "PATCH"])
 @permission_classes([IsAdmin])
 def admin_intern_submission(request, pk):
     """
@@ -385,6 +397,9 @@ def admin_intern_submission(request, pk):
             {"error": "Intern not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+    if request.method == "PATCH":
+        return _edit_submission(request, intern)
 
     user = intern.user
 
@@ -405,7 +420,18 @@ def admin_intern_submission(request, pk):
         many=True,
         context={"request": request},
     ).data
-
+    # Schedules currently assigned to this intern
+    schedules = [
+        {
+            "id": str(s.id),
+            "day_of_week": s.slot.day_of_week,
+            "shift": s.slot.shift,
+            "start_time": s.slot.start_time.strftime("%H:%M"),
+            "end_time": s.slot.end_time.strftime("%H:%M"),
+            "is_rotating": s.is_rotating,
+        }
+        for s in intern.schedules.select_related("slot").all()
+    ]
     return Response({
         "id": str(intern.id),
         "status": intern.status,
@@ -455,6 +481,7 @@ def admin_intern_submission(request, pk):
             else None
         ),
         "documents": documents,
+        "schedules": schedules,
     })
 
 
@@ -515,9 +542,8 @@ def admin_accept_intern(request, pk):
 @permission_classes([IsAdmin])
 def admin_reject_intern(request, pk):
     """
-    Reject a pending intern. Soft-deletes the user (is_active = False) so
-    they cannot log in. The InternProfile and its data are preserved for
-    record-keeping.
+    Reject a pending intern. Soft-deletes the user (is_active = False),
+    stores the rejection reason, and emails the intern that reason.
     """
     try:
         intern = InternProfile.objects.select_related("user").get(pk=pk)
@@ -525,6 +551,13 @@ def admin_reject_intern(request, pk):
         return Response(
             {"error": "Intern not found"},
             status=status.HTTP_404_NOT_FOUND,
+        )
+
+    reason = (request.data.get("reason") or "").strip()
+    if len(reason) < 10:
+        return Response(
+            {"error": "A rejection reason of at least 10 characters is required."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     if not intern.user.is_active:
@@ -537,18 +570,528 @@ def admin_reject_intern(request, pk):
         user = intern.user
         user.is_active = False
         user.save(update_fields=["is_active"])
+        intern.rejection_reason = reason
+        intern.save(update_fields=["rejection_reason"])
+
+    # Email outside the transaction — a mail failure must not
+    # roll back the rejection.
+    try:
+        _send_rejection_email(intern, reason)
+    except Exception as email_error:
+        print(f"Rejection email failed: {email_error}")
 
     return Response({
         "success": True,
         "message": "Intern rejected.",
         "intern": {
-            "id": str(intern.id),
+            "id": intern.id,
             "status": intern.status,
             "user_id": str(user.id),
             "is_active": user.is_active,
         },
     })
 
+
+def _send_rejection_email(intern, reason):
+    """Emails the rejected intern the admin's reason."""
+    user = intern.user
+    subject = "Your SIWES application — decision update"
+    message = (
+        f"Hi {user.first_name or 'there'},\n"
+        "Thank you for applying to the EarlyCode SIWES programme.\n"
+        "After reviewing your submission, we are unable to accept your "
+        "application at this time.\n\n"
+        f"Reason: {reason}\n\n"
+        "If you believe this is a mistake, please contact the EarlyCode "
+        "office.\n"
+        "— EarlyCode SIWES Team"
+    )
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost"),
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+
+def _edit_submission(request, intern):
+    """
+    Admin correction of a pending submission. Only the six non-sensitive
+    fields in SubmissionEditSerializer are writable; the view enforces
+    PENDING status so accepted records can't be altered here.
+    """
+    if intern.status != InternProfile.Status.PENDING:
+        return Response(
+            {"error": "Submissions can only be edited while pending."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    serializer = SubmissionEditSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    editable = [
+        "preferred_campus",
+        "school_start_date",
+        "school_end_date",
+        "internship_duration",
+        "other_duration",
+        "why_intern",
+    ]
+    changed = [f for f in editable if f in data]
+    if not changed:
+        return Response(
+            {"error": "No editable fields provided."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    for field in changed:
+        setattr(intern, field, data[field])
+    intern.save(update_fields=changed)
+
+    return Response({
+        "success": True,
+        "message": "Submission updated.",
+        "updated_fields": changed,
+    })
+
+# ───────────────────────────────────────────────────────────────
+# ADMIN — CONFIGURE PLACEMENT
+# ───────────────────────────────────────────────────────────────
+
+
+@api_view(["POST", "PATCH"])
+@permission_classes([IsAdmin])
+def admin_configure_intern(request, pk):
+    """
+    Configure or reconfigure an intern's placement.
+
+    Accepts any subset of:
+      - school_start_date
+      - school_end_date
+      - instructor_id
+      - is_rotating
+      - schedule (list of {day_of_week, shift})
+
+    Missing keys are left untouched. Sending `schedule` (even empty)
+    wipes and rebuilds all InternSchedule rows for the intern.
+    """
+    try:
+        intern = InternProfile.objects.select_related("user").get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = PlacementConfigSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    with transaction.atomic():
+        # ---- Dates ----
+        if "school_start_date" in data:
+            intern.school_start_date = data["school_start_date"]
+        if "school_end_date" in data:
+            intern.school_end_date = data["school_end_date"]
+        if "school_start_date" in data or "school_end_date" in data:
+            intern.save(update_fields=["school_start_date", "school_end_date"])
+
+        # ---- Instructor ----
+        if "instructor_id" in data:
+            if data["instructor_id"] is None:
+                intern.assigned_instructor = None
+                intern.save(update_fields=["assigned_instructor"])
+            else:
+                try:
+                    instructor = InstructorProfile.objects.get(
+                        user__id=data["instructor_id"]
+                    )
+                except InstructorProfile.DoesNotExist:
+                    return Response(
+                        {"error": "Instructor not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                intern.assigned_instructor = instructor
+                intern.save(update_fields=["assigned_instructor"])
+
+        # ---- Schedule (wipe and rebuild) ----
+        if "schedule" in data:
+            entries = data["schedule"]
+            is_rotating = data.get("is_rotating", True)
+
+            # Wipe
+            InternSchedule.objects.filter(intern=intern).delete()
+
+            # Rebuild
+            for entry in entries:
+                slot, _created = ScheduleSlot.objects.get_or_create(
+                    day_of_week=entry["day_of_week"],
+                    shift=entry["shift"],
+                    defaults={
+                        "start_time": (
+                            "08:30"
+                            if entry["shift"] == ScheduleSlot.Shift.MORNING
+                            else "13:00"
+                        ),
+                        "end_time": (
+                            "13:00"
+                            if entry["shift"] == ScheduleSlot.Shift.MORNING
+                            else "18:00"
+                        ),
+                    },
+                )
+                InternSchedule.objects.create(
+                    intern=intern,
+                    slot=slot,
+                    is_rotating=is_rotating,
+                )
+
+    # ---- Response: fresh intern summary ----
+    schedules = [
+        {
+            "day_of_week": s.slot.day_of_week,
+            "shift": s.slot.shift,
+            "start_time": s.slot.start_time.strftime("%H:%M"),
+            "end_time": s.slot.end_time.strftime("%H:%M"),
+        }
+        for s in InternSchedule.objects.filter(intern=intern).select_related("slot")
+    ]
+
+    return Response({
+        "success": True,
+        "message": "Placement configured.",
+        "intern": {
+            "id": str(intern.id),
+            "status": intern.status,
+            "school_start_date": intern.school_start_date,
+            "school_end_date": intern.school_end_date,
+            "assigned_instructor": (
+                {
+                    "id": str(intern.assigned_instructor.user.id),
+                    "name": intern.assigned_instructor.user.get_full_name(),
+                    "email": intern.assigned_instructor.user.email,
+                }
+                if intern.assigned_instructor
+                else None
+            ),
+            "schedules": schedules,
+        },
+    })
+
+
+# ───────────────────────────────────────────────────────────────
+# ADMIN — INSTRUCTOR CRUD
+# ───────────────────────────────────────────────────────────────
+
+
+class AdminInstructorListView(generics.ListAPIView):
+    """
+    GET — list all instructors. Admins only.
+
+    Query params:
+      ?all=true          — include deactivated instructors
+      ?campus=kubwa      — filter by campus
+    """
+
+    serializer_class = AdminInstructorSerializer
+    permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        include_all = self.request.query_params.get("all") == "true"
+        campus = self.request.query_params.get("campus")
+
+        qs = InstructorProfile.objects.select_related("user").order_by(
+            "user__first_name", "user__last_name"
+        )
+        if not include_all:
+            qs = qs.filter(user__is_active=True)
+        if campus in ("kubwa", "nyanya"):
+            qs = qs.filter(campus=campus)
+        return qs
+
+
+class AdminInstructorDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET   — read one instructor
+    PATCH — update editable fields (name, phone, department)
+
+    Uses the User's UUID as the lookup key, matching the `id` returned
+    by AdminInstructorSerializer. The InstructorProfile itself uses an
+    integer pk, which is not exposed to the frontend.
+    """
+
+    serializer_class = AdminInstructorSerializer
+    permission_classes = [IsAdmin]
+    queryset = InstructorProfile.objects.select_related("user")
+
+    def get_object(self):
+        try:
+            return self.get_queryset().get(user__id=self.kwargs["pk"])
+        except InstructorProfile.DoesNotExist:
+            raise NotFound("Instructor not found")
+        
+    def patch(self, request, *args, **kwargs):
+        instructor = self.get_object()
+        serializer = InstructorUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        with transaction.atomic():
+            user = instructor.user
+            user_fields = []
+            if "first_name" in data:
+                user.first_name = data["first_name"]
+                user_fields.append("first_name")
+            if "last_name" in data:
+                user.last_name = data["last_name"]
+                user_fields.append("last_name")
+            if "phone" in data:
+                user.phone = data["phone"]
+                user_fields.append("phone")
+            if user_fields:
+                user.save(update_fields=user_fields)
+
+            if "department" in data or "campus" in data:
+                fields = []
+                if "department" in data:
+                    instructor.department = data["department"]
+                    fields.append("department")
+                if "campus" in data:
+                    instructor.campus = data["campus"]
+                    fields.append("campus")
+                instructor.save(update_fields=fields)
+
+        return Response({
+            "success": True,
+            "instructor": AdminInstructorSerializer(instructor).data,
+        })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_create_instructor(request):
+    """
+    Create a new instructor (User + InstructorProfile) atomically.
+    Sends a welcome email with login instructions.
+    """
+    serializer = InstructorCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    with transaction.atomic():
+        email = data["email"].strip().lower()
+        user = User.objects.create(
+            username=data["email"],
+            email=data["email"],
+            first_name=data["first_name"],
+            last_name=data["last_name"],
+            phone=data.get("phone", ""),
+            role=User.Role.INSTRUCTOR,
+        )
+        user.set_unusable_password()
+        user.save()
+
+        instructor = InstructorProfile.objects.create(
+            user=user,
+            department=data.get("department", ""),
+            campus=data.get("campus", "kubwa"),
+        )
+
+    # Welcome email outside the transaction
+    try:
+        _send_instructor_welcome_email(user)
+    except Exception as email_error:
+        print(f"Instructor welcome email failed: {email_error}")
+
+    return Response(
+        {
+            "success": True,
+            "message": "Instructor created.",
+            "instructor": AdminInstructorSerializer(instructor).data,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_deactivate_instructor(request, pk):
+    """
+    Temporarily disable an instructor.
+    Interns keep their assignments. Instructor cannot log in.
+    """
+    try:
+        instructor = InstructorProfile.objects.select_related("user").get(
+            user__id=pk
+        )
+    except InstructorProfile.DoesNotExist:
+        return Response(
+            {"error": "Instructor not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not instructor.user.is_active:
+        return Response(
+            {"error": "Instructor is already deactivated."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = instructor.user
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+
+    return Response({
+        "success": True,
+        "message": "Instructor deactivated.",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_reactivate_instructor(request, pk):
+    """Restore a deactivated instructor."""
+    try:
+        instructor = InstructorProfile.objects.select_related("user").get(
+            user__id=pk
+        )
+    except InstructorProfile.DoesNotExist:
+        return Response(
+            {"error": "Instructor not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    user = instructor.user
+    if user.is_active:
+        return Response(
+            {"error": "Instructor is already active."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.is_active = True
+    user.save(update_fields=["is_active"])
+
+    return Response({
+        "success": True,
+        "message": "Instructor reactivated.",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_remove_instructor(request, pk):
+    """
+    Remove an instructor from the active roster.
+
+    - Unassigns the instructor from any interns currently pointing at them
+    - Soft-deletes the user (is_active = False)
+    - Keeps the InstructorProfile row for historical reference
+    """
+    try:
+        instructor = InstructorProfile.objects.select_related("user").get(
+            user__id=pk
+        )
+    except InstructorProfile.DoesNotExist:
+        return Response(
+            {"error": "Instructor not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    with transaction.atomic():
+        # Find interns before unassigning so we can notify them
+        affected_interns = list(
+            InternProfile.objects.filter(assigned_instructor=instructor).select_related(
+                "user"
+            )
+        )
+
+        # Unassign
+        unassigned = InternProfile.objects.filter(
+            assigned_instructor=instructor
+        ).update(assigned_instructor=None)
+
+        # Notify each affected intern
+        for intern in affected_interns:
+            Notification.objects.create(
+                user=intern.user,
+                type=Notification.Type.INSTRUCTOR_ASSIGNED,
+                message=(
+                    "Your instructor has been unassigned. "
+                    "A new instructor will be assigned to you soon."
+                ),
+            )
+
+        # Soft-delete
+        user = instructor.user
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+
+    return Response(
+        {
+            "success": True,
+            "message": "Instructor removed.",
+            "unassigned_interns": unassigned,
+        }
+    )
+
+
+def _send_instructor_welcome_email(user):
+    """Sends a plain-text welcome email to a newly created instructor."""
+    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+    login_url = f"{frontend_url}/login"
+
+    subject = "Welcome to EarlyCode SIWES (Instructor)"
+
+    message = (
+        f"Hi {user.first_name or user.email},\n\n"
+        "An administrator has created your instructor account on the "
+        "EarlyCode SIWES portal.\n\n"
+        "To log in, go to the login page and request a magic link:\n"
+        f"{login_url}\n\n"
+        "EarlyCode SIWES Team"
+    )
+
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=from_email,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+    def _notify_admins(self, user, intern):
+        """One email to every active admin per new registration."""
+        admin_emails = list(
+            User.objects.filter(
+                role=User.Role.ADMIN, is_active=True
+            ).values_list("email", flat=True)
+        )
+        if not admin_emails:
+            return
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        review_url = f"{frontend_url}/dashboard/admin/pending"
+        subject = "New SIWES registration — review pending"
+        message = (
+            "A new intern has registered and is awaiting review.\n\n"
+            f"Name: {user.get_full_name() or '—'}\n"
+            f"Email: {user.email}\n"
+            f"Campus: {intern.preferred_campus or '—'}\n\n"
+            f"Review here: {review_url}\n"
+            "— EarlyCode SIWES"
+        )
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=admin_emails,
+                fail_silently=False,
+            )
+        except Exception as email_error:
+            print(f"Admin notification email failed: {email_error}")
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
@@ -689,10 +1232,53 @@ def _send_documents_email(intern, uploaded_types):
     )
 
 
-class AdminInternListCreateView(generics.ListCreateAPIView):
-    queryset = InternProfile.objects.all()
-    serializer_class = InternProfileSerializer
+class AdminInternPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+
+class AdminInternListCreateView(generics.ListAPIView):
+    """
+    GET — list all interns with pagination, status filter, search, campus filter.
+    Query params:
+      ?status=pending|active|completed|all  (default: all)
+      ?search=john                          (searches name + email)
+      ?campus=kubwa|nyanya                  (optional)
+      ?page=2                               (pagination)
+    """
+
+    serializer_class = AdminInternListSerializer
     permission_classes = [IsAdmin]
+    pagination_class = AdminInternPagination
+
+    def get_queryset(self):
+        qs = InternProfile.objects.select_related(
+            "user", "assigned_instructor__user"
+        ).order_by("-created_at")
+
+        # Status filter
+        status_filter = self.request.query_params.get("status", "all")
+        if status_filter in ("pending", "active", "completed"):
+            qs = qs.filter(status=status_filter.upper())
+
+        # Campus filter
+        campus = self.request.query_params.get("campus")
+        if campus in ("kubwa", "nyanya"):
+            qs = qs.filter(preferred_campus=campus)
+
+        # Search
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(user__email__icontains=search)
+            )
+
+        return qs
 
 
 class AdminInternDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -705,33 +1291,53 @@ class AdminInternDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAdmin])
 def assign_instructor(request, pk):
     try:
-        intern = InternProfile.objects.get(pk=pk)
+        intern = InternProfile.objects.select_related("user").get(pk=pk)
     except InternProfile.DoesNotExist:
         return Response({"error": "Intern not found"}, status=status.HTTP_404_NOT_FOUND)
 
     instructor_id = request.data.get("instructor_id")
     if not instructor_id:
         return Response(
-            {"error": "instructor_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            {"error": "instructor_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     try:
-        instructor = InstructorProfile.objects.get(pk=instructor_id)
+        instructor = InstructorProfile.objects.select_related("user").get(
+            user__id=instructor_id
+        )
     except InstructorProfile.DoesNotExist:
         return Response(
-            {"error": "Instructor not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Instructor not found"},
+            status=status.HTTP_404_NOT_FOUND,
         )
 
     intern.assigned_instructor = instructor
-    intern.save()
+    intern.save(update_fields=["assigned_instructor"])
 
     Notification.objects.create(
         user=intern.user,
-        type="INSTRUCTOR_ASSIGNED",
-        message=f"You have been assigned to instructor {instructor.user.get_full_name()}",
+        type=Notification.Type.INSTRUCTOR_ASSIGNED,
+        message=(
+            f"You have been assigned a new instructor: "
+            f"{instructor.user.get_full_name()}."
+        ),
     )
 
-    return Response({"success": True, "message": "Instructor assigned"})
+    return Response(
+        {
+            "success": True,
+            "message": "Instructor assigned.",
+            "intern": {
+                "id": intern.pk,
+                "assigned_instructor": {
+                    "id": str(instructor.user.id),
+                    "name": instructor.user.get_full_name(),
+                    "email": instructor.user.email,
+                },
+            },
+        }
+    )
 
 
 @api_view(["POST"])
@@ -755,12 +1361,6 @@ def set_intern_dates(request, pk):
 
 
 class AdminInstructorListCreateView(generics.ListCreateAPIView):
-    queryset = InstructorProfile.objects.all()
-    serializer_class = InstructorProfileSerializer
-    permission_classes = [IsAdmin]
-
-
-class AdminInstructorDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = InstructorProfile.objects.all()
     serializer_class = InstructorProfileSerializer
     permission_classes = [IsAdmin]
@@ -990,7 +1590,10 @@ def intern_dashboard(request):
     unread_notifications = Notification.objects.filter(user=user, is_read=False).count()
 
     # ---------- Recent reports (up to 4) ----------
-    recent_reports = reports_qs.order_by("-submitted_at")[:4]
+    # Drafts are excluded — "Recent reports" shows only submitted/reviewed work.
+    recent_reports = reports_qs.exclude(status=Report.Status.DRAFT).order_by(
+        "-submitted_at"
+    )[:4]
 
     # ---------- Upcoming on-site days (next 35 days) ----------
     attendance_has_schedule = False

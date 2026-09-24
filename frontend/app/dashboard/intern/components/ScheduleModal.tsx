@@ -63,10 +63,7 @@ export function ScheduleModal({
       size="md"
       footer={
         <div className="flex items-center justify-between w-full">
-          <span
-            className="text-[11.5px]"
-            style={{ color: "var(--modal-header-muted)" }}
-          >
+          <span className="text-[11.5px]" style={{ color: "var(--muted)" }}>
             {isEmpty
               ? ""
               : `Showing ${days.length} upcoming day${days.length === 1 ? "" : "s"}`}
@@ -76,11 +73,11 @@ export function ScheduleModal({
             onClick={onClose}
             className="h-9 px-5 rounded-full text-[13px] hover:font-bold font-semibold transition-colors"
             style={{
-              backgroundColor: "var(--bg-card-elevated)",
-              color: "var(--text-primary)",
+              backgroundColor: "var(--surface2)",
+              color: "var(--text)",
             }}
           >
-            Done
+            Close
           </button>
         </div>
       }
@@ -117,8 +114,7 @@ export function ScheduleModal({
                         : "1px solid var(--modal-section-hairline)",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "var(--bg-card-elevated)";
+                    e.currentTarget.style.backgroundColor = "var(--surface2)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";
@@ -127,7 +123,7 @@ export function ScheduleModal({
                   <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="text-[13.5px] font-medium truncate"
-                      style={{ color: "var(--text-primary)" }}
+                      style={{ color: "var(--text)" }}
                     >
                       {formatDayLong(day.date)}
                     </span>
@@ -135,8 +131,8 @@ export function ScheduleModal({
                       <span
                         className="text-[10px] font-semibold uppercase tracking-[0.08em] px-1.5 py-[2px] rounded-full shrink-0"
                         style={{
-                          backgroundColor: "var(--gold)",
-                          color: "var(--text-on-gold)",
+                          backgroundColor: "var(--gold-500)",
+                          color: "var(--coal)",
                         }}
                       >
                         Today
@@ -146,14 +142,14 @@ export function ScheduleModal({
 
                   <div
                     className="text-[13px] truncate"
-                    style={{ color: "var(--text-secondary)" }}
+                    style={{ color: "var(--muted)" }}
                   >
                     {formatShift(day.shift)}
                   </div>
 
                   <div
                     className="text-[13px] tabular-nums truncate"
-                    style={{ color: "var(--text-primary)" }}
+                    style={{ color: "var(--text)" }}
                   >
                     {day.start_time} – {day.end_time}
                   </div>

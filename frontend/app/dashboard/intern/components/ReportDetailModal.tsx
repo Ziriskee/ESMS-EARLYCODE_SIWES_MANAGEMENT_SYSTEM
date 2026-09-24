@@ -76,8 +76,8 @@ export function ReportDetailModal({
             onClick={onClose}
             className="h-9 px-5 rounded-full text-[13px] font-semibold transition-colors"
             style={{
-              backgroundColor: "var(--bg-card-elevated)",
-              color: "var(--text-primary)",
+              backgroundColor: "var(--surface2)",
+              color: "var(--text)",
             }}
           >
             Close
@@ -87,10 +87,7 @@ export function ReportDetailModal({
     >
       <div className="space-y-7">
         {isDraft && (
-          <p
-            className="text-[12px] italic"
-            style={{ color: "var(--text-secondary)" }}
-          >
+          <p className="text-[12px] italic" style={{ color: "var(--muted)" }}>
             This report is a draft. It has not been submitted to your instructor
             yet.
           </p>
@@ -99,11 +96,11 @@ export function ReportDetailModal({
         <Section label="Content">
           <div
             className="rounded-[10px] p-4"
-            style={{ backgroundColor: "var(--bg-card-elevated)" }}
+            style={{ backgroundColor: "var(--surface2)" }}
           >
             <p
               className="text-[13.5px] whitespace-pre-wrap leading-relaxed"
-              style={{ color: "var(--text-primary)" }}
+              style={{ color: "var(--text)" }}
             >
               {report.content}
             </p>

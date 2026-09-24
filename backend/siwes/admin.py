@@ -53,7 +53,8 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(AdminProfile)
 class AdminProfileAdmin(admin.ModelAdmin):
-    list_display = ["user", "admin_level"]
+    list_display = ["user", "admin_level", "campus"]
+    list_filter = ["campus"]
     search_fields = ["user__email", "user__first_name", "user__last_name"]
 
 

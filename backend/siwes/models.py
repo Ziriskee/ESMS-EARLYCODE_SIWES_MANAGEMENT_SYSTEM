@@ -66,6 +66,10 @@ class User(AbstractUser):
 class AdminProfile(models.Model):
     """Extended profile for Admin users."""
 
+    class Campus(models.TextChoices):
+        KUBWA = "kubwa", "Kubwa"
+        NYANYA = "nyanya", "Nyanya"
+
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -73,6 +77,12 @@ class AdminProfile(models.Model):
         limit_choices_to={"role": User.Role.ADMIN},
     )
     admin_level = models.CharField(max_length=50, blank=True)
+    campus = models.CharField(
+        max_length=20,
+        choices=Campus.choices,
+        blank=True,
+        help_text="Default campus filter for this admin. Blank = all campuses.",
+    )
 
     def __str__(self):
         return f"Admin: {self.user.get_full_name()}"
@@ -91,6 +101,13 @@ class InstructorProfile(models.Model):
         on_delete=models.CASCADE,
         related_name="instructor_profile",
         limit_choices_to={"role": User.Role.INSTRUCTOR},
+    )
+    department = models.CharField(max_length=100, blank=True)
+    campus = models.CharField(
+        max_length=20,
+        choices=AdminProfile.Campus.choices,
+        default="kubwa",
+        help_text="Which campus this instructor belongs to.",
     )
     department = models.CharField(max_length=100, blank=True)
 
@@ -176,6 +193,10 @@ class InternProfile(models.Model):
     emergency_contact_type = models.CharField(max_length=20, blank=True)
     emergency_phone = models.CharField(max_length=20, blank=True)
     declaration = models.TextField(blank=True)
+    rejection_reason = models.TextField(
+        blank=True,
+        help_text="Reason given by the admin when rejecting this intern.",
+    )
     it_letter = models.FileField(upload_to="it_letters/", blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -396,6 +417,8 @@ class Report(models.Model):
         DRAFT = "DRAFT", "Draft"
         SUBMITTED = "SUBMITTED", "Submitted"
         REVIEWED = "REVIEWED", "Reviewed"
+        APPROVED = "APPROVED", "Approved"
+        NEEDS_REVISION = "NEEDS_REVISION", "Needs Revision"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     intern = models.ForeignKey(

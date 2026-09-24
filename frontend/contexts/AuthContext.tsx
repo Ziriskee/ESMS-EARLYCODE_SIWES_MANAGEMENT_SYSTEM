@@ -6,6 +6,8 @@ export type AuthUser = {
   role: "ADMIN" | "INSTRUCTOR" | "INTERN";
   first_name: string;
   last_name: string;
+  /** Only populated for role="ADMIN". Either "kubwa", "nyanya", or null. */
+  campus?: string | null;
 };
 
 type AuthContextType = {

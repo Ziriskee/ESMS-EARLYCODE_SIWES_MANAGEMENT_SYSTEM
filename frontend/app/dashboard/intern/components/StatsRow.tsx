@@ -22,31 +22,35 @@ export function StatsRow({
     typeof daysRemaining === "number" ? pad2(daysRemaining) : "—";
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
         tone={1}
         icon={FileText}
         label="Reports submitted"
         value={pad2(reportsSubmitted)}
+        sub="All time"
       />
       <StatCard
         tone={2}
         icon={ListChecks}
         label="Pending tasks"
         value={pad2(tasksPending)}
+        sub="Awaiting your action"
       />
       <StatCard
         tone={3}
         icon={MessageSquare}
         label="Unread messages"
         value={pad2(unreadMessages)}
+        sub="From your supervisor"
       />
       <StatCard
         tone={4}
         icon={Clock}
         label="Days remaining"
         value={daysValue}
+        sub="Until your placement ends"
       />
-    </div>
+    </section>
   );
 }

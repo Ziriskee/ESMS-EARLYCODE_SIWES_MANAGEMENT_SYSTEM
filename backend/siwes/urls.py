@@ -34,9 +34,45 @@ urlpatterns = [
         name="admin-reject-intern",
     ),
     path(
+        "admin/interns/<pk>/configure/",
+        views.admin_configure_intern,
+        name="admin-configure-intern",
+    ),
+    path(
         "admin/interns/<pk>/documents/",
         views.admin_upload_documents,
         name="admin-upload-documents",
+    ),
+    # Instructor routes — literal suffixes first, then detail
+    path(
+        "admin/instructors/",
+        views.AdminInstructorListView.as_view(),
+        name="admin-instructors",
+    ),
+    path(
+        "admin/instructors/create/",
+        views.admin_create_instructor,
+        name="admin-create-instructor",
+    ),
+    path(
+        "admin/instructors/<uuid:pk>/deactivate/",
+        views.admin_deactivate_instructor,
+        name="admin-deactivate-instructor",
+    ),
+    path(
+        "admin/instructors/<uuid:pk>/reactivate/",
+        views.admin_reactivate_instructor,
+        name="admin-reactivate-instructor",
+    ),
+    path(
+        "admin/instructors/<uuid:pk>/remove/",
+        views.admin_remove_instructor,
+        name="admin-remove-instructor",
+    ),
+    path(
+        "admin/instructors/<uuid:pk>/",
+        views.AdminInstructorDetailView.as_view(),
+        name="admin-instructor-detail",
     ),
     path(
         "admin/interns/",
@@ -44,29 +80,19 @@ urlpatterns = [
         name="admin-interns",
     ),
     path(
-        "admin/interns/<uuid:pk>/",
+        "admin/interns/<pk>/",
         views.AdminInternDetailView.as_view(),
         name="admin-intern-detail",
     ),
     path(
-        "admin/interns/<uuid:pk>/assign-instructor/",
+        "admin/interns/<pk>/assign-instructor/",
         views.assign_instructor,
         name="assign-instructor",
     ),
     path(
-        "admin/interns/<uuid:pk>/set-dates/",
+        "admin/interns/<pk>/set-dates/",
         views.set_intern_dates,
         name="set-intern-dates",
-    ),
-    path(
-        "admin/instructors/",
-        views.AdminInstructorListCreateView.as_view(),
-        name="admin-instructors",
-    ),
-    path(
-        "admin/instructors/<uuid:pk>/",
-        views.AdminInstructorDetailView.as_view(),
-        name="admin-instructor-detail",
     ),
     path(
         "admin/schedules/",

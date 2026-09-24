@@ -1,108 +1,119 @@
 import { useEffect, useState } from "react";
-import { Bell, LayoutGrid, MessageSquare, FileText } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { SidebarBrand } from "./SidebarBrand";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarCollapseButton } from "./SidebarCollapseButton";
-import { SidebarProgressMini } from "./SidebarProgressMini";
 
 const STORAGE_KEY = "siwes_sidebar_collapsed";
 
-const navItems = [
-  {
-    to: "/dashboard/intern",
-    label: "Overview",
-    icon: LayoutGrid,
-  },
-  {
-    to: "/dashboard/intern/reports",
-    label: "Reports",
-    icon: FileText,
-  },
-  {
-    to: "/dashboard/intern/messages",
-    label: "Messages",
-    icon: MessageSquare,
-  },
-  {
-    to: "/dashboard/intern/notifications",
-    label: "Notifications",
-    icon: Bell,
-  },
-];
+export type SidebarNavItemConfig = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: number;
+};
+
+type SidebarProps = {
+  appLabel: string;
+  navItems: SidebarNavItemConfig[];
+  version?: string;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+  footerSlot?: React.ReactNode;
+};
 
 function getInitialCollapsed(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(STORAGE_KEY) === "true";
 }
 
-type SidebarProps = {
-  badges?: {
-    reports?: number;
-    messages?: number;
-    notifications?: number;
-  };
-};
-
-export function Sidebar({ badges }: SidebarProps) {
+export function Sidebar({
+  appLabel,
+  navItems,
+  version = "v2.4",
+  mobileOpen = false,
+  onCloseMobile,
+  footerSlot,
+}: SidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(getInitialCollapsed);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, String(collapsed));
   }, [collapsed]);
 
-  const width = collapsed ? 72 : 260;
-
-  const badgeFor = (label: string): number | undefined => {
-    if (!badges) return undefined;
-    if (label === "Reports") return badges.reports;
-    if (label === "Messages") return badges.messages;
-    if (label === "Notifications") return badges.notifications;
-    return undefined;
-  };
+  // On mobile the drawer always renders expanded.
+  const effectiveCollapsed = !mobileOpen && collapsed;
 
   return (
-    <aside
-      className="relative shrink-0 flex flex-col h-screen transition-[width] duration-200"
-      style={{
-        width,
-        backgroundColor: "var(--bg-sidebar)",
-      }}
-    >
-      <SidebarBrand collapsed={collapsed} />
-
-      {!collapsed && (
+    <>
+      {mobileOpen && (
         <div
-          className="px-5 mb-2"
-          style={{
-            color: "var(--text-tertiary)",
-            letterSpacing: "0.1em",
-          }}
-        >
-          <span className="text-[11px] font-semibold uppercase">Workspace</span>
-        </div>
+          className="fixed inset-0 z-40 lg:hidden"
+          style={{ backgroundColor: "var(--modal-backdrop)" }}
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
       )}
 
-      <nav className="flex flex-col gap-1">
-        {navItems.map((item) => (
-          <SidebarNavItem
-            key={item.to}
-            to={item.to}
-            label={item.label}
-            icon={item.icon}
-            badge={badgeFor(item.label)}
-            collapsed={collapsed}
-          />
-        ))}
-      </nav>
+      <aside
+        className={`
+          fixed lg:relative inset-y-0 left-0 z-50 lg:z-auto
+          w-[276px] ${effectiveCollapsed ? "lg:w-24" : "lg:w-[276px]"}
+          shrink-0 flex flex-col h-dvh border-r
+          transition-all duration-300 ease-out
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        `}
+        style={{
+          backgroundColor: "var(--sidebar-bg)",
+          borderColor: "var(--line)",
+          overflow: "visible",
+        }}
+      >
+        <SidebarBrand collapsed={effectiveCollapsed} appLabel={appLabel} />
 
-      <div className="flex-1" />
+        <nav className="mt-8 flex-1 overflow-y-auto px-3 pb-4">
+          {!effectiveCollapsed && (
+            <p
+              className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.26em]"
+              style={{ color: "var(--muted)" }}
+            >
+              Workspace
+            </p>
+          )}
+          <ul className="space-y-1">
+            {navItems.map((item) => (
+              <li key={item.to}>
+                <SidebarNavItem
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  badge={item.badge}
+                  collapsed={effectiveCollapsed}
+                  onNavigate={onCloseMobile}
+                />
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-      <SidebarProgressMini collapsed={collapsed} />
+        {!effectiveCollapsed && footerSlot}
 
-      <SidebarCollapseButton
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
-      />
-    </aside>
+        <div className="border-t p-3" style={{ borderColor: "var(--line)" }}>
+          {!effectiveCollapsed && (
+            <p
+              className="px-2.5 text-[10px] tracking-wide opacity-70"
+              style={{ color: "var(--muted)" }}
+            >
+              EC · SIWES Portal · {version}
+            </p>
+          )}
+        </div>
+
+        <SidebarCollapseButton
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((c) => !c)}
+        />
+      </aside>
+    </>
   );
 }

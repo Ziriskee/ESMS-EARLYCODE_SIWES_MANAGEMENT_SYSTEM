@@ -29,7 +29,7 @@ export function StatusChip({ tone, label }: StatusChipProps) {
 
   return (
     <span
-      className="inline-flex items-center rounded-[6px] px-2 py-[3px] text-[12px] font-semibold leading-none whitespace-nowrap"
+      className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none whitespace-nowrap"
       style={{ backgroundColor: t.bg, color: t.text }}
     >
       {label}

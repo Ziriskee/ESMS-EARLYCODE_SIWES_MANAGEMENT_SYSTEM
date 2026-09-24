@@ -32,6 +32,8 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     """Base user serializer."""
 
+    campus = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
@@ -43,11 +45,19 @@ class UserSerializer(serializers.ModelSerializer):
             "gender",
             "address",
             "role",
+            "campus",
             "profile_picture",
             "is_active",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+    def get_campus(self, obj):
+        """Admin default campus, or None for other roles."""
+        if obj.role != User.Role.ADMIN:
+            return None
+        profile = getattr(obj, "admin_profile", None)
+        return profile.campus if profile else None
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -98,14 +108,16 @@ class InternRegisterSerializer(serializers.Serializer):
         allow_empty=False
     )
 
-    
-
     def validate_email(self, value):
         from django.contrib.auth import get_user_model
+
         User = get_user_model()
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
-        return value
+        normalized = value.strip().lower()
+        if User.objects.filter(email__iexact=normalized).exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists."
+            )
+        return normalized
 
     def create(self, validated_data):
         from django.contrib.auth import get_user_model
@@ -153,7 +165,6 @@ class InternProfileSerializer(serializers.ModelSerializer):
             "user",
             "assigned_instructor",
             "status",
-            "school_start_date",
             "school_start_date",
             "school_end_date",
             "state_of_origin",
@@ -233,6 +244,195 @@ class InternDocumentUploadSerializer(serializers.Serializer):
         if not attrs.get("code_of_conduct") and not attrs.get("acceptance_letter"):
             raise serializers.ValidationError("At least one document must be provided.")
         return attrs
+
+
+class PlacementConfigSerializer(serializers.Serializer):
+    """
+    Partial-update payload for the admin configure endpoint.
+
+    Any field can be omitted. Missing fields are left untouched.
+    Sending `schedule` (even as []) wipes and rebuilds all schedules for
+    the intern. Omitting `schedule` leaves existing schedules alone.
+    """
+
+    school_start_date = serializers.DateField(required=False, allow_null=True)
+    school_end_date = serializers.DateField(required=False, allow_null=True)
+    instructor_id = serializers.UUIDField(required=False, allow_null=True)
+    is_rotating = serializers.BooleanField(required=False)
+    schedule = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+
+    def validate_schedule(self, value):
+        """Validate each entry has a valid day and shift."""
+        valid_days = {c[0] for c in ScheduleSlot.DayOfWeek.choices}
+        valid_shifts = {c[0] for c in ScheduleSlot.Shift.choices}
+
+        cleaned = []
+        for i, entry in enumerate(value):
+            day = entry.get("day_of_week")
+            shift = entry.get("shift")
+
+            if day not in valid_days:
+                raise serializers.ValidationError(
+                    f"schedule[{i}]: day_of_week must be one of "
+                    f"{sorted(valid_days)}."
+                )
+            if shift not in valid_shifts:
+                raise serializers.ValidationError(
+                    f"schedule[{i}]: shift must be one of "
+                    f"{sorted(valid_shifts)}."
+                )
+
+            cleaned.append({"day_of_week": day, "shift": shift})
+
+        # Reject duplicate (day, shift) pairs in the same payload.
+        seen = set()
+        for entry in cleaned:
+            key = (entry["day_of_week"], entry["shift"])
+            if key in seen:
+                raise serializers.ValidationError(
+                    f"schedule: duplicate entry {key}."
+                )
+            seen.add(key)
+
+        return cleaned
+
+
+class SubmissionEditSerializer(serializers.Serializer):
+    """
+    Admin-only partial edit of a PENDING intern's submission.
+    Only non-sensitive fields are accepted here. Everything else
+    (identity, academics, contacts, declaration) stays locked.
+    """
+
+    preferred_campus = serializers.ChoiceField(
+        choices=[("kubwa", "Kubwa"), ("nyanya", "Nyanya")],
+        required=False,
+    )
+    school_start_date = serializers.DateField(required=False, allow_null=True)
+    school_end_date = serializers.DateField(required=False, allow_null=True)
+    internship_duration = serializers.CharField(
+        required=False, allow_blank=True, max_length=50
+    )
+    other_duration = serializers.CharField(
+        required=False, allow_blank=True, max_length=100
+    )
+    why_intern = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        start = attrs.get("school_start_date")
+        end = attrs.get("school_end_date")
+        if start and end and end <= start:
+            raise serializers.ValidationError("End date must be after the start date.")
+        return attrs
+
+
+class InstructorCreateSerializer(serializers.Serializer):
+    """Creates a User + InstructorProfile atomically."""
+
+    email = serializers.EmailField()
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    department = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    campus = serializers.ChoiceField(
+        choices=AdminProfile.Campus.choices,
+        required=True,
+    )
+
+    def validate_email(self, value):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists."
+            )
+        return value.lower()
+
+
+class InstructorUpdateSerializer(serializers.Serializer):
+    """PATCH-style partial update for an instructor. Email is locked."""
+
+    first_name = serializers.CharField(required=False, max_length=150)
+    last_name = serializers.CharField(required=False, max_length=150)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    department = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    campus = serializers.ChoiceField(
+        choices=AdminProfile.Campus.choices,
+        required=False,
+    )
+
+
+class AdminInstructorSerializer(serializers.ModelSerializer):
+    """
+    Read serializer for instructors, used by both admin (list/detail)
+    and the intern's 'assigned instructor' display.
+    """
+
+    id = serializers.UUIDField(source="user.id", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    is_active = serializers.BooleanField(source="user.is_active", read_only=True)
+    assigned_intern_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = InstructorProfile
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "department",
+            "campus",
+            "is_active",
+            "assigned_intern_count",
+        ]
+
+
+class AdminInternListSerializer(serializers.ModelSerializer):
+    """
+    Lightweight serializer for the admin All Interns list.
+    Returns only the fields needed for the table row.
+    """
+    id = serializers.IntegerField(read_only=True)
+    user = serializers.SerializerMethodField()
+    assigned_instructor = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InternProfile
+        fields = [
+            "id",
+            "user",
+            "preferred_campus",
+            "status",
+            "assigned_instructor",
+            "school_start_date",
+            "school_end_date",
+            "created_at",
+        ]
+
+    def get_user(self, obj):
+        return {
+            "id": str(obj.user.id),
+            "email": obj.user.email,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+            "phone": obj.user.phone,
+        }
+
+    def get_assigned_instructor(self, obj):
+        if not obj.assigned_instructor:
+            return None
+        return {
+            "id": str(obj.assigned_instructor.user.id),
+            "name": obj.assigned_instructor.user.get_full_name(),
+            "email": obj.assigned_instructor.user.email,
+        }
 
 
 # ───────────────────────────────────────────────────────────────

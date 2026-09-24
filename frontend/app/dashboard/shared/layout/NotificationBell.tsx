@@ -18,9 +18,9 @@ export function NotificationBell({ count, onClick }: NotificationBellProps) {
       title="Notifications"
       className="relative h-10 w-10 rounded-full border flex items-center justify-center transition-colors"
       style={{
-        borderColor: "var(--border-subtle)",
-        backgroundColor: "var(--bg-card)",
-        color: "var(--text-primary)",
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
+        color: "var(--text)",
       }}
     >
       <Bell size={18} strokeWidth={1.75} />
@@ -29,8 +29,8 @@ export function NotificationBell({ count, onClick }: NotificationBellProps) {
         <span
           className="absolute -top-1 -right-1 h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
           style={{
-            backgroundColor: "var(--gold)",
-            color: "var(--text-on-gold)",
+            backgroundColor: "var(--gold-500)",
+            color: "var(--coal)",
           }}
         >
           {count > 99 ? "99+" : count}

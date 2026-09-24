@@ -9,8 +9,8 @@ export default function DashboardPage() {
       <div
         className="min-h-screen flex items-center justify-center"
         style={{
-          backgroundColor: "var(--bg-page)",
-          color: "var(--text-primary)",
+          backgroundColor: "var(--bg)",
+          color: "var(--text)",
         }}
       >
         Loading...
@@ -30,25 +30,15 @@ export default function DashboardPage() {
         <div
           className="min-h-screen flex items-center justify-center"
           style={{
-            backgroundColor: "var(--bg-page)",
-            color: "var(--text-primary)",
+            backgroundColor: "var(--bg)",
+            color: "var(--text)",
           }}
         >
           Instructor dashboard coming soon.
         </div>
       );
     case "ADMIN":
-      return (
-        <div
-          className="min-h-screen flex items-center justify-center"
-          style={{
-            backgroundColor: "var(--bg-page)",
-            color: "var(--text-primary)",
-          }}
-        >
-          Admin dashboard coming soon.
-        </div>
-      );
+      return <Navigate to="/dashboard/admin" replace />;
     default:
       return <Navigate to="/login" replace />;
   }

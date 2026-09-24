@@ -18,14 +18,16 @@ export function SidebarCollapseButton({
       onClick={onToggle}
       aria-label={label}
       title={label}
-      className="absolute top-1/2 -translate-y-1/2 -right-3 h-8 w-8 rounded-full border flex items-center justify-center transition-colors duration-150 z-10"
+      className="hidden lg:flex absolute top-[62%] -translate-y-1/2 h-7 w-7 rounded-full border items-center justify-center transition-colors"
       style={{
-        borderColor: "var(--border-sidebar)",
-        backgroundColor: "var(--bg-sidebar)",
-        color: "var(--gold)",
+        right: "-14px",
+        zIndex: 50,
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface2)",
+        color: "var(--muted)",
       }}
     >
-      <Icon size={16} strokeWidth={2} />
+      <Icon size={14} strokeWidth={2} />
     </button>
   );
 }

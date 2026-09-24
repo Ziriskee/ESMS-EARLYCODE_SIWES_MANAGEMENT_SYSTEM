@@ -17,7 +17,8 @@ export function RecentReportsCard({
     <Card padding="lg">
       <SectionHeader
         title="Recent reports"
-        action={{ label: "View all →", to: "/dashboard/intern/reports" }}
+        subtitle="Your latest submissions"
+        action={{ label: "View all", to: "/dashboard/intern/reports" }}
       />
 
       {reports.length === 0 ? (
@@ -27,8 +28,8 @@ export function RecentReportsCard({
         />
       ) : (
         <div
-          className="divide-y"
-          style={{ borderColor: "var(--border-subtle)" }}
+          className="flex flex-col divide-y"
+          style={{ borderColor: "var(--line)" }}
         >
           {reports.map((report) => (
             <ReportRow

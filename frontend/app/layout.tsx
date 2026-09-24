@@ -5,7 +5,6 @@ import RegisterPage from "./register/page";
 import LandingPage from "./page";
 import LoginPage from "./login/page";
 import VerifyLogin from "./verify-login/page";
-import { AuthProvider } from "@/contexts/AuthProvider";
 import ProtectedRoute from "@/components/ProtectedRoute";
 // import { useAuth } from "@/contexts/useAuth";
 import DashboardPage from "./dashboard/page";
@@ -14,6 +13,11 @@ import InternOverviewPage from "./dashboard/intern/page";
 import InternReportsPage from "./dashboard/intern/reports/page";
 import InternMessagesPage from "./dashboard/intern/messages/page";
 import InternNotificationsPage from "./dashboard/intern/notifications/page";
+import { AdminLayout } from "./dashboard/admin/layout";
+import AdminOverviewPage from "./dashboard/admin/page";
+import AdminPendingPage from "./dashboard/admin/pending/page";
+import AdminInstructorsPage from "./dashboard/admin/instructors/page";
+import AdminAllInternsPage from "./dashboard/admin/interns/page";
 
 function NotFoundPage() {
   return (
@@ -34,9 +38,58 @@ function NotFoundPage() {
   );
 }
 
+
+function AdminReportsPlaceholder() {
+  return (
+    <div
+      className="rounded-[14px] border p-8"
+      style={{
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
+      }}
+    >
+      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
+        Admin Reports — coming later.
+      </p>
+    </div>
+  );
+}
+
+function AdminMessagesPlaceholder() {
+  return (
+    <div
+      className="rounded-[14px] border p-8"
+      style={{
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
+      }}
+    >
+      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
+        Admin Messages — coming later.
+      </p>
+    </div>
+  );
+}
+
+function AdminNotificationsPlaceholder() {
+  return (
+    <div
+      className="rounded-[14px] border p-8"
+      style={{
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
+      }}
+    >
+      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
+        Admin Notifications — coming later.
+      </p>
+    </div>
+  );
+}
+
 export function App() {
   return (
-    <AuthProvider>
+    <>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -64,7 +117,27 @@ export function App() {
           <Route path="messages" element={<InternMessagesPage />} />
           <Route path="notifications" element={<InternNotificationsPage />} />
         </Route>
+
+        <Route
+          path="/dashboard/admin"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminOverviewPage />} />
+          <Route path="pending" element={<AdminPendingPage />} />
+          <Route path="interns" element={<AdminAllInternsPage />} />
+          <Route path="instructors" element={<AdminInstructorsPage />} />
+          <Route path="reports" element={<AdminReportsPlaceholder />} />
+          <Route path="messages" element={<AdminMessagesPlaceholder />} />
+          <Route
+            path="notifications"
+            element={<AdminNotificationsPlaceholder />}
+          />
+        </Route>
       </Routes>
-    </AuthProvider>
+    </>
   );
 }

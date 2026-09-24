@@ -1,31 +1,32 @@
 import type { CSSProperties, ReactNode } from "react";
 
 type CardVariant = "default" | "feature" | "elevated";
+type CardPadding = "none" | "sm" | "md" | "lg";
 
 type CardProps = {
   children: ReactNode;
   variant?: CardVariant;
-  padding?: "none" | "sm" | "md" | "lg";
+  padding?: CardPadding;
   className?: string;
   style?: CSSProperties;
 };
 
 const variantStyles: Record<CardVariant, CSSProperties> = {
   default: {
-    backgroundColor: "var(--bg-card)",
-    borderColor: "var(--border-subtle)",
+    backgroundColor: "var(--surface)",
+    borderColor: "var(--line)",
   },
   feature: {
-    backgroundColor: "var(--bg-feature)",
-    borderColor: "transparent",
+    backgroundColor: "var(--surface)",
+    borderColor: "var(--line)",
   },
   elevated: {
-    backgroundColor: "var(--bg-card-elevated)",
-    borderColor: "var(--border-subtle)",
+    backgroundColor: "var(--surface2)",
+    borderColor: "var(--line)",
   },
 };
 
-const paddingMap = {
+const paddingMap: Record<CardPadding, number> = {
   none: 0,
   sm: 16,
   md: 20,
@@ -41,8 +42,9 @@ export function Card({
 }: CardProps) {
   return (
     <div
-      className={`rounded-[14px] border ${className}`}
+      className={`border ${className}`}
       style={{
+        borderRadius: "var(--radius-card)",
         ...variantStyles[variant],
         padding: paddingMap[padding],
         ...style,

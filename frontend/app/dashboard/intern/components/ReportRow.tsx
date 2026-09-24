@@ -1,5 +1,4 @@
 import { StatusChip } from "../../shared/data/StatusChip";
-import { Button } from "../../shared/ui/Button";
 
 type ReportRowProps = {
   title: string;
@@ -30,18 +29,15 @@ export function ReportRow({
   const chipLabel = status === "REVIEWED" ? "Reviewed" : "Submitted";
 
   return (
-    <div className="flex items-center justify-between gap-4 py-4">
+    <div className="-mx-2 flex items-center gap-4 rounded-xl px-2 py-4 transition-colors hover:bg-[var(--tint)]">
       <div className="min-w-0 flex-1">
         <p
           className="text-[15px] font-semibold leading-snug truncate"
-          style={{ color: "var(--text-primary)" }}
+          style={{ color: "var(--text)" }}
         >
           {title}
         </p>
-        <p
-          className="text-[13px] mt-0.5"
-          style={{ color: "var(--text-secondary)" }}
-        >
+        <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
           {formatDate(submittedAt)}
         </p>
       </div>
@@ -50,9 +46,18 @@ export function ReportRow({
         <StatusChip tone={chipTone} label={chipLabel} />
       </div>
 
-      <Button variant="secondary" size="sm" onClick={onOpen}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="shrink-0 h-9 px-5 rounded-full text-[13px] font-semibold transition-colors"
+        style={{
+          backgroundColor: "var(--surface2)",
+          color: "var(--text)",
+          border: "1px solid var(--line)",
+        }}
+      >
         Open
-      </Button>
+      </button>
     </div>
   );
 }

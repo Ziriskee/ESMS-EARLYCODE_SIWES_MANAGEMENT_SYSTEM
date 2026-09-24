@@ -3,11 +3,11 @@ export default function InternMessagesPage() {
     <div
       className="rounded-[14px] border p-8"
       style={{
-        borderColor: "var(--border-subtle)",
-        backgroundColor: "var(--bg-card)",
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
       }}
     >
-      <p className="text-[14px]" style={{ color: "var(--text-secondary)" }}>
+      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
         Messages page coming soon.
       </p>
     </div>

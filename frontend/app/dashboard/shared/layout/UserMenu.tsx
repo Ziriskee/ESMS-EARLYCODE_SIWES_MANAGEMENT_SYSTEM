@@ -38,9 +38,9 @@ export function UserMenu() {
         aria-expanded={open}
         className="flex items-center gap-2 h-10 pl-1 pr-3 rounded-full border transition-colors"
         style={{
-          borderColor: "var(--border-subtle)",
-          backgroundColor: "var(--bg-card)",
-          color: "var(--text-primary)",
+          borderColor: "var(--line)",
+          backgroundColor: "var(--surface)",
+          color: "var(--text)",
         }}
       >
         <Avatar
@@ -59,29 +59,29 @@ export function UserMenu() {
           role="menu"
           className="absolute right-0 mt-2 w-56 rounded-[14px] border overflow-hidden z-50"
           style={{
-            borderColor: "var(--border-subtle)",
-            backgroundColor: "var(--bg-card)",
+            borderColor: "var(--line)",
+            backgroundColor: "var(--surface)",
           }}
         >
           <div
             className="px-4 py-3 border-b"
-            style={{ borderColor: "var(--border-subtle)" }}
+            style={{ borderColor: "var(--line)" }}
           >
             <p
               className="text-[13px] font-semibold truncate"
-              style={{ color: "var(--text-primary)" }}
+              style={{ color: "var(--text)" }}
             >
               {user.first_name} {user.last_name}
             </p>
             <p
               className="text-[12px] truncate"
-              style={{ color: "var(--text-secondary)" }}
+              style={{ color: "var(--muted)" }}
             >
               {user.email}
             </p>
             <p
               className="text-[11px] font-semibold uppercase tracking-[0.06em] mt-1"
-              style={{ color: "var(--text-tertiary)" }}
+              style={{ color: "var(--muted)" }}
             >
               {roleLabel}
             </p>
@@ -91,10 +91,9 @@ export function UserMenu() {
             type="button"
             role="menuitem"
             className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-left transition-colors"
-            style={{ color: "var(--text-primary)" }}
+            style={{ color: "var(--text)" }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor =
-                "var(--bg-card-elevated)")
+              (e.currentTarget.style.backgroundColor = "var(--surface2)")
             }
             onMouseLeave={(e) =>
               (e.currentTarget.style.backgroundColor = "transparent")
@@ -109,10 +108,9 @@ export function UserMenu() {
             type="button"
             role="menuitem"
             className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-left transition-colors"
-            style={{ color: "var(--text-primary)" }}
+            style={{ color: "var(--text)" }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor =
-                "var(--bg-card-elevated)")
+              (e.currentTarget.style.backgroundColor = "var(--surface2)")
             }
             onMouseLeave={(e) =>
               (e.currentTarget.style.backgroundColor = "transparent")

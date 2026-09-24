@@ -22,10 +22,10 @@ export function Avatar({ firstName, lastName, size = "md" }: AvatarProps) {
       style={{
         width: px,
         height: px,
-        fontSize: size === "sm" ? 12 : size === "md" ? 14 : 16,
-        backgroundColor: "var(--bg-card-elevated)",
-        color: "var(--text-primary)",
-        border: "1px solid var(--border-subtle)",
+        fontSize: size === "sm" ? 11 : size === "md" ? 13 : 15,
+        backgroundColor: "var(--gold-500)",
+        color: "var(--coal)",
+        letterSpacing: "0.02em",
       }}
       aria-hidden="true"
     >

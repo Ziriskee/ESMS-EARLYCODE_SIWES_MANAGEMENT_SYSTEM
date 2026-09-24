@@ -17,31 +17,32 @@ const sizeStyles: Record<ButtonSize, string> = {
   md: "h-11 px-6 text-[14px]",
 };
 
-function getVariantStyle(variant: ButtonVariant) {
+function getVariantStyle(variant: ButtonVariant): React.CSSProperties {
   switch (variant) {
     case "primary":
       return {
-        backgroundColor: "var(--gold)",
-        color: "var(--text-on-gold)",
+        backgroundColor: "var(--gold-500)",
+        color: "var(--coal)",
         borderColor: "transparent",
+        fontWeight: 600,
       };
     case "secondary":
       return {
         backgroundColor: "transparent",
-        color: "var(--text-primary)",
-        borderColor: "var(--border-strong)",
+        color: "var(--text)",
+        borderColor: "var(--line)",
       };
     case "ghost":
       return {
         backgroundColor: "transparent",
-        color: "var(--gold)",
+        color: "var(--gold-800)",
         borderColor: "transparent",
       };
     case "pill":
       return {
-        backgroundColor: "var(--border-strong)",
-        color: "var(--text-primary)",
-        borderColor: "transparent",
+        backgroundColor: "var(--surface2)",
+        color: "var(--text)",
+        borderColor: "var(--line)",
       };
   }
 }
@@ -63,7 +64,7 @@ export function Button({
     <button
       type="button"
       disabled={isDisabled}
-      className={`rounded-full border font-semibold inline-flex items-center justify-center gap-2 transition-colors duration-150 ${sizeStyles[size]} ${className}`}
+      className={`rounded-full border inline-flex items-center justify-center gap-2 transition-colors duration-150 font-medium ${sizeStyles[size]} ${className}`}
       style={{
         ...getVariantStyle(variant),
         opacity: isDisabled ? 0.5 : 1,

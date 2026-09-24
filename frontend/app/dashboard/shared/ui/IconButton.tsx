@@ -20,9 +20,9 @@ export function IconButton({
       style={{
         width: size,
         height: size,
-        borderColor: "var(--border-subtle)",
-        backgroundColor: "var(--bg-card)",
-        color: "var(--text-primary)",
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
+        color: "var(--muted)",
         ...style,
       }}
       {...rest}

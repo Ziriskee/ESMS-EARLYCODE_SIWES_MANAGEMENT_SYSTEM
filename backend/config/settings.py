@@ -174,7 +174,7 @@ CORS_ALLOW_CREDENTIALS = True
 # ============================================================================
 
 # Development: prints emails to console (terminal)
-EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "noreply@earlycode.local"
 FRONTEND_URL = "http://localhost:5173"
 

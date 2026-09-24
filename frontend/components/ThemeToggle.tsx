@@ -17,9 +17,9 @@ export function ThemeToggle() {
       title={label}
       className="h-10 w-10 rounded-full border flex items-center justify-center transition-colors"
       style={{
-        borderColor: "var(--border-subtle)",
-        backgroundColor: "var(--bg-card)",
-        color: "var(--text-primary)",
+        borderColor: "var(--line)",
+        backgroundColor: "var(--surface)",
+        color: "var(--text)",
       }}
     >
       <Icon size={18} strokeWidth={1.75} />

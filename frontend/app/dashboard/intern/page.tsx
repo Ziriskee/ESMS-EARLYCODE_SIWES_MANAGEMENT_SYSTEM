@@ -15,7 +15,7 @@ export default function InternOverviewPage() {
   if (loading) {
     return (
       <Card padding="lg">
-        <p className="text-[14px]" style={{ color: "var(--text-secondary)" }}>
+        <p className="text-[14px]" style={{ color: "var(--muted)" }}>
           Loading your overview...
         </p>
       </Card>
@@ -39,7 +39,6 @@ export default function InternOverviewPage() {
     <div className="space-y-8 pt-2">
       <WelcomeCard
         firstName={user.first_name || "there"}
-        lastName={user.last_name || ""}
         weeksCompleted={placement?.weeks_completed ?? null}
         totalWeeks={placement?.total_weeks ?? null}
       />

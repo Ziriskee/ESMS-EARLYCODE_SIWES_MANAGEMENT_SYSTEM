@@ -6,16 +6,13 @@ type EmptyStateProps = {
 export function EmptyState({ title, description }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-10 px-6">
-      <p
-        className="text-[14px] font-semibold"
-        style={{ color: "var(--text-primary)" }}
-      >
+      <p className="text-[15px] font-semibold" style={{ color: "var(--text)" }}>
         {title}
       </p>
       {description && (
         <p
-          className="text-[13px] mt-1 max-w-sm"
-          style={{ color: "var(--text-secondary)" }}
+          className="text-[13px] mt-1.5 max-w-sm"
+          style={{ color: "var(--muted)" }}
         >
           {description}
         </p>

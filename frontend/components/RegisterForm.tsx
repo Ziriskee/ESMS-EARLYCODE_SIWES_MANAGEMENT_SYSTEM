@@ -290,7 +290,7 @@ export default function RegisterForm() {
   return (
     <div className="min-h-screen bg-ec-dark">
       {/* Header */}
-      <div className="w-full px-6 py-5 border-b border-white/10 bg-ec-dark/90">
+      <div className="w-full px-4 sm:px-6 py-4 sm:py-5 border-b border-white/10 bg-ec-dark/90">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <a href="/" className="flex items-center gap-3">
             <img
@@ -308,7 +308,7 @@ export default function RegisterForm() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-3 md:px-6 py-12">
+      <div className="max-w-4xl mx-auto px-3 sm:px-6 py-8 sm:py-12">
         {/* Title */}
         <div className="text-center mb-10">
           <span className="text-ec-gold text-sm font-semibold tracking-widest uppercase mb-4 block font-body">
@@ -440,7 +440,7 @@ export default function RegisterForm() {
             <Form>
               <AutoSave values={values} currentStep={currentStep} />
 
-              <div className="p-6 md:p-10 rounded-3xl border border-white/10 bg-white/5">
+              <div className="p-5 sm:p-6 md:p-10 rounded-3xl border border-white/10 bg-white/5">
                 {currentStep === 1 && <StepPersonal />}
                 {currentStep === 2 && <StepSchool />}
                 {currentStep === 3 && <StepAdditional />}
@@ -476,7 +476,7 @@ export default function RegisterForm() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="px-1 py-3 bg-ec-gold text-ec-dark rounded-full font-bold text-sm hover:scale-105 hover:shadow-lg hover:shadow-ec-gold/20 transition-all duration-300 font-body flex items-center justify-center gap-2 w-25"
+                      className="px-6 sm:px-8 py-3 bg-ec-gold text-ec-dark rounded-full font-bold text-sm hover:scale-105 hover:shadow-lg hover:shadow-ec-gold/20 transition-all duration-300 font-body flex items-center justify-center gap-2 min-w-25"
                     >
                       {isSubmitting ? (
                         <>

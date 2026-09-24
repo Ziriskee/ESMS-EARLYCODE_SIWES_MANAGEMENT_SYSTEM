@@ -1,49 +1,78 @@
+import { Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
 import { UserMenu } from "./UserMenu";
+import { useAuth } from "@/contexts/useAuth";
+import { CampusFilter } from "./CampusFilter";
 
 type TopBarProps = {
   title: string;
   subtitle?: string;
   notificationCount?: number;
+  onOpenMobileNav?: () => void;
 };
 
 export function TopBar({
   title,
   subtitle,
   notificationCount = 0,
+  onOpenMobileNav,
 }: TopBarProps) {
+    const { user } = useAuth();
+    const showCampusFilter = user?.role === "ADMIN";
   return (
     <header
-      className="h-[72px] flex items-center justify-between px-6 md:px-12 shrink-0"
+      className="shrink-0 border-b z-20"
       style={{
-        backgroundColor: "var(--bg-page)",
+        borderColor: "var(--line)",
+        backgroundColor: "var(--header)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
       }}
     >
-      <div className="min-w-0">
-        <h1
-          className="text-[24px] md:text-[28px] font-bold leading-tight truncate"
-          style={{
-            color: "var(--text-primary)",
-            fontFamily: "var(--font-heading)",
-          }}
-        >
-          {title}
-        </h1>
-        {subtitle && (
-          <p
-            className="text-[13px] mt-0.5 truncate"
-            style={{ color: "var(--text-secondary)" }}
+      <div className="h-[64px] sm:h-[72px] flex items-center gap-3 px-4 sm:px-6 md:px-8 lg:px-12">
+        {onOpenMobileNav && (
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            aria-label="Open navigation"
+            className="lg:hidden h-10 w-10 -ml-1 rounded-full border flex items-center justify-center shrink-0"
+            style={{
+              borderColor: "var(--line)",
+              backgroundColor: "transparent",
+              color: "var(--text)",
+            }}
           >
-            {subtitle}
-          </p>
+            <Menu size={20} strokeWidth={1.8} />
+          </button>
         )}
-      </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
-        <ThemeToggle />
-        <NotificationBell count={notificationCount} />
-        <UserMenu />
+        <div className="min-w-0 flex-1">
+          <h1
+            className="text-[20px] sm:text-[22px] md:text-[28px] font-semibold leading-tight truncate"
+            style={{
+              color: "var(--text)",
+              fontFamily: "var(--font-display)",
+            }}
+          >
+            {title}
+          </h1>
+          {subtitle && (
+            <p
+              className="text-[12.5px] mt-0.5 truncate hidden sm:block"
+              style={{ color: "var(--muted)" }}
+            >
+              {subtitle}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
+          {showCampusFilter && <CampusFilter />}
+          <ThemeToggle />
+          <NotificationBell count={notificationCount} />
+          <UserMenu />
+        </div>
       </div>
     </header>
   );
