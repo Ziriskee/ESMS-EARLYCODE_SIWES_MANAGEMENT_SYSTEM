@@ -13,10 +13,16 @@ urlpatterns = [
     path("auth/logout/", logout, name="logout"),
     # Admin
     path("admin/dashboard/", views.admin_dashboard, name="admin-dashboard"),
+    path("admin/profile/", views.admin_own_profile, name="admin-own-profile"),
     path(
         "admin/interns/pending/",
         views.admin_pending_interns,
         name="admin-pending-interns",
+    ),
+    path(
+        "admin/interns/<pk>/documents/generate/",
+        views.generate_intern_documents,
+        name="generate-intern-documents",
     ),
     path(
         "admin/interns/<pk>/submission/",
@@ -100,14 +106,22 @@ urlpatterns = [
         name="admin-schedules",
     ),
     path("admin/reports/", views.AdminReportListView.as_view(), name="admin-reports"),
-    path(
-        "admin/messages/broadcast/", views.broadcast_message, name="broadcast-message"
-    ),
+    
     # Instructor
     path(
         "instructor/dashboard/", views.instructor_dashboard, name="instructor-dashboard"
     ),
     path("instructor/interns/", views.my_interns, name="my-interns"),
+    path(
+        "instructor/interns/<pk>/",
+        views.instructor_intern_detail,
+        name="instructor-intern-detail",
+    ),
+    path(
+        "instructor/profile/",
+        views.instructor_profile,
+        name="instructor-profile",
+    ),
     path(
         "instructor/tasks/",
         views.InstructorTaskListCreateView.as_view(),
@@ -123,14 +137,25 @@ urlpatterns = [
         views.assign_task_to_interns,
         name="assign-task",
     ),
+    path(
+        "instructor/tasks/<uuid:pk>/attachments/",
+        views.upload_task_attachments,
+        name="upload-task-attachments",
+    ),
+    path(
+        "instructor/assignments/<int:pk>/review/",
+        views.review_task_assignment,
+        name="review-task-assignment",
+    ),
     path("instructor/reports/", views.instructor_reports, name="instructor-reports"),
     path("instructor/reports/<uuid:pk>/", views.review_report, name="review-report"),
     # Intern
     path("intern/dashboard/", views.intern_dashboard, name="intern-dashboard"),
+    path("intern/profile/", views.intern_own_profile, name="intern-own-profile"),
     path("intern/documents/", views.my_documents, name="my-documents"),
     path("intern/schedule/", views.my_schedule, name="my-schedule"),
     path("intern/tasks/", views.my_tasks, name="my-tasks"),
-    path("intern/tasks/<uuid:pk>/submit/", views.submit_task, name="submit-task"),
+    path("intern/tasks/<int:pk>/submit/", views.submit_task, name="submit-task"),
     path(
         "intern/reports/",
         views.InternReportListCreateView.as_view(),
@@ -154,5 +179,16 @@ urlpatterns = [
         name="mark-notification-read",
     ),
     path("courses/", views.CourseListView.as_view(), name="courses"),
-    path("messages/", views.MessageListCreateView.as_view(), name="messages"),
+    path("messages/users/", views.messageable_users, name="messageable-users"),
+    path("messages/conversations/", views.conversations, name="conversations"),
+    path(
+        "messages/conversations/<uuid:pk>/",
+        views.conversation_thread,
+        name="conversation-thread",
+    ),
+    path(
+        "messages/conversations/<uuid:pk>/messages/",
+        views.send_message,
+        name="send-message",
+    ),
 ]

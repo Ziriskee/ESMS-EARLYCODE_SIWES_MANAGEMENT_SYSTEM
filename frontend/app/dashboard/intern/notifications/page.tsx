@@ -1,16 +1,9 @@
-import { NotificationsFeed } from "../components/NotificationsFeed";
-import { useNotifications } from "../hooks/useNotifications";
-import { useDashboardDataContext } from "@/contexts/useDashboardDataContext";
+import { NotificationsFeed } from "../../shared/components/notifications/NotificationsFeed";
+import { useNotificationsContext } from "@/contexts/useNotificationsContext";
 
 export default function InternNotificationsPage() {
   const { notifications, loading, error, markAsRead, markAllAsRead } =
-    useNotifications();
-  const { refetch: refetchDashboard } = useDashboardDataContext();
-
-  const handleMarkAllRead = async () => {
-    await markAllAsRead();
-    await refetchDashboard();
-  };
+    useNotificationsContext();
 
   return (
     <NotificationsFeed
@@ -18,7 +11,7 @@ export default function InternNotificationsPage() {
       loading={loading}
       error={error}
       onMarkRead={markAsRead}
-      onMarkAllRead={handleMarkAllRead}
+      onMarkAllRead={markAllAsRead}
     />
   );
 }

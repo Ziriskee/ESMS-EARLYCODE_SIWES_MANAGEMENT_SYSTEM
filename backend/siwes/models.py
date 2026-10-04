@@ -109,14 +109,13 @@ class InstructorProfile(models.Model):
         default="kubwa",
         help_text="Which campus this instructor belongs to.",
     )
-    department = models.CharField(max_length=100, blank=True)
 
     def __str__(self):
         return f"Instructor: {self.user.get_full_name()}"
 
     @property
     def assigned_intern_count(self):
-        return self.assigned_interns.count()
+        return self.assigned_interns.count() # type: ignore
 
 
 # ───────────────────────────────────────────────────────────────
@@ -176,12 +175,12 @@ class InternProfile(models.Model):
     school_end_date = models.DateField(null=True, blank=True)
 
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.PENDING
+        max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True
     )
 
     # Extra fields from registration form
     state_of_origin = models.CharField(max_length=100, blank=True)
-    preferred_campus = models.CharField(max_length=50, blank=True)
+    preferred_campus = models.CharField(max_length=50, blank=True, db_index=True)
     current_institution = models.CharField(max_length=200, blank=True)
     institution_address = models.TextField(blank=True)
     course_of_study = models.CharField(max_length=200, blank=True)
@@ -247,7 +246,7 @@ class InternDocument(models.Model):
         ordering = ["-uploaded_at"]
 
     def __str__(self):
-        return f"{self.get_type_display()} — {self.intern.full_name}"
+        return f"{self.get_type_display()} — {self.intern.full_name}" # type: ignore
 
 
 # ───────────────────────────────────────────────────────────────
@@ -311,7 +310,7 @@ class ScheduleSlot(models.Model):
         unique_together = ["day_of_week", "shift"]
 
     def __str__(self):
-        return f"{self.get_day_of_week_display()} {self.get_shift_display()} ({self.start_time.strftime('%H:%M')}-{self.end_time.strftime('%H:%M')})"
+        return f"{self.get_day_of_week_display()} {self.get_shift_display()} ({self.start_time.strftime('%H:%M')}-{self.end_time.strftime('%H:%M')})" # type: ignore
 
 
 # ───────────────────────────────────────────────────────────────
@@ -372,6 +371,22 @@ class Task(models.Model):
         return self.title
 
 
+class TaskAttachment(models.Model):
+    """
+    Files attached to a task by the instructor (reference materials,
+    templates, images). Multiple attachments per task.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    task = models.ForeignKey(Task, related_name="attachments", on_delete=models.CASCADE)
+    file = models.FileField(upload_to="task_attachments/")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["uploaded_at"]
+
+    def __str__(self):
+        return f"Attachment for {self.task.title}"
+
 # ───────────────────────────────────────────────────────────────
 # 10. TASK ASSIGNMENTS
 # ───────────────────────────────────────────────────────────────
@@ -390,10 +405,17 @@ class TaskAssignment(models.Model):
         InternProfile, on_delete=models.CASCADE, related_name="task_assignments"
     )
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.PENDING
+        max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True
     )
     submitted_at = models.DateTimeField(null=True, blank=True)
     instructor_feedback = models.TextField(blank=True)
+    submission_file = models.FileField(
+        upload_to="task_submissions/",
+        blank=True,
+        null=True,
+        help_text="File uploaded by the intern when submitting the task.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -426,11 +448,12 @@ class Report(models.Model):
     )
     title = models.CharField(max_length=200)
     content = models.TextField()
-    submitted_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(auto_now_add=True,db_index=True)
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.SUBMITTED
+        max_length=20, choices=Status.choices, default=Status.SUBMITTED, db_index=True
     )
     instructor_feedback = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     admin_seen = models.BooleanField(default=False)
 
     class Meta:
@@ -446,24 +469,54 @@ class Report(models.Model):
 
 
 class Message(models.Model):
-    """Messages between users. Interns can only message their instructor and admin."""
+    """A single chat message inside a Conversation."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(
+        "Conversation", on_delete=models.CASCADE, related_name="messages"
+    )
     sender = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="sent_messages"
     )
-    recipient = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="received_messages"
-    )
-    content = models.TextField()
-    sent_at = models.DateTimeField(auto_now_add=True)
+    body = models.TextField(max_length=2000)
     is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-sent_at"]
+        ordering = ["created_at"]
 
     def __str__(self):
-        return f"From {self.sender.get_full_name()} to {self.recipient.get_full_name()}"
+        return f"{self.sender}: {self.body[:30]}"
+
+
+class Conversation(models.Model):
+    """Strict 1-to-1 chat thread between two users.
+    The unique constraint guarantees one thread per pair, forever."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    initiator = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="conversations_started"
+    )
+    recipient = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="conversations_received"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["initiator", "recipient"],
+                name="unique_conversation_pair",
+            )
+        ]
+        ordering = ["-updated_at"]
+
+    def other(self, user):
+        return self.recipient if self.initiator_id == user.id else self.initiator
+
+    def __str__(self):
+        return f"{self.initiator} <-> {self.recipient}"
 
 
 # ───────────────────────────────────────────────────────────────
@@ -475,11 +528,15 @@ class Notification(models.Model):
     """System notifications for users."""
 
     class Type(models.TextChoices):
-        TASK_ASSIGNED = "TASK_ASSIGNED", "Task Assigned"
         REPORT_SUBMITTED = "REPORT_SUBMITTED", "Report Submitted"
+        REPORT_REVIEWED = "REPORT_REVIEWED", "Report Reviewed"
+        TASK_ASSIGNED = "TASK_ASSIGNED", "Task Assigned"
+        TASK_REVIEWED = "TASK_REVIEWED", "Task Reviewed"
+        TASK_SUBMITTED = "TASK_SUBMITTED", "Task Submitted"
         MESSAGE_RECEIVED = "MESSAGE_RECEIVED", "Message Received"
         SCHEDULE_UPDATED = "SCHEDULE_UPDATED", "Schedule Updated"
         INSTRUCTOR_ASSIGNED = "INSTRUCTOR_ASSIGNED", "Instructor Assigned"
+        NEW_REGISTRATION = "NEW_REGISTRATION", "New Registration"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

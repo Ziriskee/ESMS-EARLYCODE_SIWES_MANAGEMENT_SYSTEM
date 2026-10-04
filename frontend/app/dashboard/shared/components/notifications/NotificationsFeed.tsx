@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { Card } from "../../shared/ui/Card";
-import { EmptyState } from "../../shared/ui/EmptyState";
+import { Card } from "../../ui/Card";
+import { EmptyState } from "../../ui/EmptyState";
 import { NotificationRow } from "./NotificationRow";
-import type { Notification } from "../hooks/useNotifications";
+import type { Notification } from "../../hooks/useNotifications";
+import { CheckCheck, ChevronDown } from "lucide-react";
+import { GROUP_LABELS, NOTIFICATION_GROUPS, NotificationGroup, NotificationType } from "./notificationMeta";
 
 type Filter = "all" | "unread";
 
@@ -21,28 +23,30 @@ export function NotificationsFeed({
   onMarkRead,
   onMarkAllRead,
 }: NotificationsFeedProps) {
-  const [filter, setFilter] = useState<Filter>("all");
-
+const [filter, setFilter] = useState<Filter>("all");
+const [typeFilter, setTypeFilter] = useState<NotificationGroup>("all");
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.is_read).length,
     [notifications],
   );
-
-  const visible = useMemo(
-    () =>
-      filter === "unread"
-        ? notifications.filter((n) => !n.is_read)
-        : notifications,
-    [notifications, filter],
-  );
-
+const visible = useMemo(() => {
+  let list =
+    filter === "unread"
+      ? notifications.filter((n) => !n.is_read)
+      : notifications;
+  if (typeFilter !== "all") {
+    const allowed = NOTIFICATION_GROUPS[typeFilter];
+    list = list.filter((n) => allowed.includes(n.type as NotificationType));
+  }
+  return list;
+}, [notifications, filter, typeFilter]);
   const countLabel =
     unreadCount === 0
       ? "No unread updates"
       : `${unreadCount} unread update${unreadCount > 1 ? "s" : ""}`;
 
   return (
-    <Card padding="lg" >
+    <Card padding="lg">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
         <div>
@@ -59,8 +63,7 @@ export function NotificationsFeed({
             {countLabel}
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div
             className="flex items-center rounded-full p-1"
             style={{ backgroundColor: "var(--surface2)" }}
@@ -76,22 +79,50 @@ export function NotificationsFeed({
               onClick={() => setFilter("unread")}
             />
           </div>
-
+          <div className="relative">
+            <select
+              value={typeFilter}
+              onChange={(e) =>
+                setTypeFilter(e.target.value as NotificationGroup)
+              }
+              className="appearance-none h-9 pl-4 pr-10 rounded-full text-[13px] font-semibold border border-[var(--line)] bg-[var(--surface2)] text-[var(--text)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--gold-500)]"
+            >
+              {(
+                [
+                  "all",
+                  "tasks",
+                  "reports",
+                  "messages",
+                  "system",
+                ] as NotificationGroup[]
+              ).map((g) => (
+                <option key={g} value={g}>
+                  {GROUP_LABELS[g]}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={16}
+              className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: "var(--muted)" }}
+            />
+          </div>
           <button
             type="button"
             onClick={onMarkAllRead}
             disabled={unreadCount === 0}
-            className="h-9 px-5 rounded-full text-[13px] font-semibold transition-colors"
+            className="h-9 px-4 rounded-full text-[13px] font-semibold transition-colors flex items-center gap-2"
             style={{
               backgroundColor:
-                unreadCount === 0 ? "var(--tint)" : "var(--surface2)",
-              color: unreadCount === 0 ? "var(--muted)" : "var(--text)",
+                unreadCount === 0 ? "var(--tint)" : "var(--gold-500)",
+              color: unreadCount === 0 ? "var(--muted)" : "var(--coal)",
               border: "1px solid var(--line)",
               cursor: unreadCount === 0 ? "not-allowed" : "pointer",
               opacity: unreadCount === 0 ? 0.5 : 1,
             }}
           >
-            Mark all as read
+            <CheckCheck size={15} strokeWidth={2} />
+            <span>Mark all read</span>
           </button>
         </div>
       </div>
@@ -102,31 +133,37 @@ export function NotificationsFeed({
           Loading notifications...
         </p>
       )}
-
       {!loading && error && (
         <EmptyState
           title="We couldn't load your notifications."
           description={error}
         />
       )}
-
       {!loading && !error && notifications.length === 0 && (
         <EmptyState
           title="No notifications yet."
-          description="Updates about your placement will appear here."
+          description="Updates about your interns and reports will appear here."
         />
       )}
-
       {!loading &&
         !error &&
         notifications.length > 0 &&
-        visible.length === 0 && <EmptyState title="You're all caught up." />}
+        visible.length === 0 && (
+          <EmptyState
+            title={
+              filter === "unread" && typeFilter !== "all"
+                ? `No unread ${GROUP_LABELS[typeFilter].toLowerCase()} notifications.`
+                : filter === "unread"
+                  ? "You're all caught up."
+                  : typeFilter !== "all"
+                    ? `No ${GROUP_LABELS[typeFilter].toLowerCase()} notifications.`
+                    : "No notifications match your filters."
+            }
+          />
+        )}
 
       {!loading && !error && visible.length > 0 && (
-        <div
-          className="flex flex-col"
-          style={{ borderColor: "var(--line)" }}
-        >
+        <div className="flex flex-col" style={{ borderColor: "var(--line)" }}>
           {visible.map((n) => (
             <NotificationRow
               key={n.id}

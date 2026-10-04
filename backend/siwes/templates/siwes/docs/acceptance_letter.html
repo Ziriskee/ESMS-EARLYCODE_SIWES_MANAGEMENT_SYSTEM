@@ -1,0 +1,178 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page {
+        size: A4;
+        margin: 1.85cm;
+        margin-bottom: 2.8cm; /* Reserves space at the bottom so text doesn't overlap the footer */
+
+        @frame footer_frame {
+          -pdf-frame-content: footerContent;
+          bottom: 0.5cm;
+          left: 1.85cm;
+          right: 1.85cm;
+          height: 2cm;
+        }
+      }
+
+      {% if fonts_dir %}
+          @font-face {
+          font-family: "SourceSans3";
+          src: url({{ fonts_dir }}/SourceSans3-Regular.ttf);
+          }
+          @font-face {
+          font-family: "SourceSans3";
+          font-weight: bold;
+          src: url({{ fonts_dir }}/SourceSans3-Bold.ttf);
+          }
+          @font-face {
+          font-family: "SourceSans3";
+          font-style: italic;
+          src: url({{ fonts_dir }}/SourceSans3-Italic.ttf);
+          }
+      {% endif %}
+      body {
+        font-family: "SourceSans3", Helvetica, sans-serif;
+        font-size: 12pt;
+        line-height: 1.6;
+        color: #000;
+      }
+      .company {
+        font-size: 16pt;
+        font-weight: bold;
+        margin-bottom: 5px;
+        text-align: right;
+        color: #2acbe3;
+      }
+      .addr {
+        font-size: 10pt;
+        margin-bottom: 15px;
+        text-align: right;
+        color: gray;
+      }
+      .date {
+        margin-bottom: 20px;
+        text-align: right;
+      }
+      .title {
+        text-align: center;
+        font-weight: bold;
+        margin: 20px 0;
+        font-size: 14pt;
+      }
+      p {
+        margin: 0 0 15px 0;
+        text-align: justify;
+      }
+      .sig {
+        margin-top: 40px;
+      }
+      .footer {
+        font-size: 9pt;
+        color: gray;
+        text-align: center;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Logo, right-aligned (table-free: text-align works in xhtml2pdf) -->
+    <div style="text-align: right; margin-bottom: 10px">
+      {% if logo_data_uri %}
+      <img
+        src="{{ logo_data_uri }}"
+        alt="Early Code Logo"
+        style="width: 60px; height: auto; margin-bottom: 10px"
+      />
+      {% endif %}
+    </div>
+
+    <div class="company">Early Code Ltd</div>
+    <div class="addr">
+      Plot B53 Gado Nasko Road<br />Kubwa, Abuja, FCT-Abuja<br />Nigeria
+    </div>
+
+    <div class="date">{{ issued_date }}</div>
+
+    <p>Dear {{ full_name }},</p>
+
+    <div class="title">INTERNSHIP ACCEPTANCE LETTER</div>
+
+    <p>
+      I am pleased to confirm the acceptance of your internship with Early Code
+      Ltd.
+    </p>
+
+    <p>
+      {{ honorific }} {{ first_name }}, with Matriculation No: {{ matric_number }}, is a {{ level }}-level {{ course_of_study }} student at the {{institution }}, who will work in our company as an industrial trainee for
+      <strong>{{ duration_text }}</strong>. The position is scheduled to start
+      on {{ start_date }}, and end on {{ end_date }}.
+    </p>
+
+    <p>
+      The management will continuously review {{ possessive }} performance
+      during the stated period to ensure that proper knowledge is instilled in
+      {{ objective }}.
+    </p>
+
+    <p>We hope you will be at your best whilst with us.</p>
+
+    <div class="sig">
+      With Regards,<br />
+      Ifeanyichukwu Agu,<br />
+      {% if signature_data_uri %}
+      <img
+        src="{{ signature_data_uri }}"
+        alt="Signature"
+        style="width: 130px; height: auto"
+      /><br />
+      {% endif %} Human Resource Manager,<br />
+      Early Code Ltd<br />
+      <em>Signed for the Management</em>
+    </div>
+
+    <!-- The ID 'footerContent' links this div to the @frame in the CSS -->
+    <div id="footerContent">
+      <table
+        style="width: 100%; margin-top: 40px"
+        cellpadding="0"
+        cellspacing="0"
+        border="0"
+      >
+        <tr>
+          <td
+            style="
+              width: 68%;
+              font-size: 8pt;
+              color: gray;
+              vertical-align: middle;
+              white-space: nowrap;
+            "
+          >
+            Telephone: +234 708 777 7367 | email: info@earlycode.net | website:
+            earlycode.net
+          </td>
+          <td style="width: 32%; vertical-align: middle" align="right">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td
+                  style="background-color: #2acbe3; width: 55px; height: 12px"
+                ></td>
+                <td style="width: 3px"></td>
+                <td
+                  style="background-color: orange; width: 18px; height: 4px"
+                ></td>
+                <td style="width: 3px"></td>
+                <td
+                  style="background-color: red; width: 30px; height: 4px"
+                ></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

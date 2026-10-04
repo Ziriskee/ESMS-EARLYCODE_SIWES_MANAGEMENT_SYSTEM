@@ -14,6 +14,7 @@ export type AdminDashboardStats = {
   active_interns: number;
   total_reports: number;
   unread_reports: number;
+  unread_conversations: number;
 };
 
 export type PendingInternSummary = {

@@ -26,17 +26,7 @@ export default function DashboardPage() {
     case "INTERN":
       return <Navigate to="/dashboard/intern" replace />;
     case "INSTRUCTOR":
-      return (
-        <div
-          className="min-h-screen flex items-center justify-center"
-          style={{
-            backgroundColor: "var(--bg)",
-            color: "var(--text)",
-          }}
-        >
-          Instructor dashboard coming soon.
-        </div>
-      );
+      return <Navigate to="/dashboard/instructor" replace />;
     case "ADMIN":
       return <Navigate to="/dashboard/admin" replace />;
     default:

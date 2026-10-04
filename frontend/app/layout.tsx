@@ -1,23 +1,77 @@
 import { Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import { useLocation } from "react-router-dom";
+import { DashboardSkeleton } from "./dashboard/shared/ui/DashboardSkeleton";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 // Lazy load the register page for better performance
-import RegisterPage from "./register/page";
-import LandingPage from "./page";
+// ── Public surface shells ────────────────────────────────────
+import MarketingPage from "./page";
 import LoginPage from "./login/page";
-import VerifyLogin from "./verify-login/page";
-import ProtectedRoute from "@/components/ProtectedRoute";
-// import { useAuth } from "@/contexts/useAuth";
-import DashboardPage from "./dashboard/page";
-import { InternLayout } from "./dashboard/intern/layout";
-import InternOverviewPage from "./dashboard/intern/page";
-import InternReportsPage from "./dashboard/intern/reports/page";
-import InternMessagesPage from "./dashboard/intern/messages/page";
-import InternNotificationsPage from "./dashboard/intern/notifications/page";
-import { AdminLayout } from "./dashboard/admin/layout";
-import AdminOverviewPage from "./dashboard/admin/page";
-import AdminPendingPage from "./dashboard/admin/pending/page";
-import AdminInstructorsPage from "./dashboard/admin/instructors/page";
-import AdminAllInternsPage from "./dashboard/admin/interns/page";
+import RegisterPage from "./register/page";
+import VerifyLoginPage from "./verify-login/page";
+const DashboardRedirectPage = lazy(() => import("./dashboard/page"));
+
+// ── Dashboard shells (own their providers + shared UI) ───────
+const InternLayout = lazy(() =>
+  import("./dashboard/intern/layout").then((m) => ({
+    default: m.InternLayout,
+  })),
+);
+const AdminLayout = lazy(() =>
+  import("./dashboard/admin/layout").then((m) => ({
+    default: m.AdminLayout,
+  })),
+);
+const InstructorLayout = lazy(() =>
+  import("./dashboard/instructor/layout").then((m) => ({
+    default: m.InstructorLayout,
+  })),
+);
+const InternMessagesPage = lazy(
+  () => import("./dashboard/intern/messages/page"),
+);
+const InstructorMessagesPage = lazy(
+  () => import("./dashboard/instructor/messages/page"),
+);
+const AdminMessagesPage = lazy(() => import("./dashboard/admin/messages/page"));
+const InternOverviewPage = lazy(() => import("./dashboard/intern/page"));
+const InternReportsPage = lazy(() => import("./dashboard/intern/reports/page"));
+const InternTasksPage = lazy(() => import("./dashboard/intern/tasks/page"));
+const InternNotificationsPage = lazy(
+  () => import("./dashboard/intern/notifications/page"),
+);
+const AdminOverviewPage = lazy(() => import("./dashboard/admin/page"));
+const AdminPendingPage = lazy(() => import("./dashboard/admin/pending/page"));
+const AdminAllInternsPage = lazy(
+  () => import("./dashboard/admin/interns/page"),
+);
+const AdminInstructorsPage = lazy(
+  () => import("./dashboard/admin/instructors/page"),
+);
+const AdminNotificationsPage = lazy(
+  () => import("./dashboard/admin/notifications/page"),
+);
+const InstructorOverviewPage = lazy(
+  () => import("./dashboard/instructor/page"),
+);
+const InstructorInternsPage = lazy(
+  () => import("./dashboard/instructor/interns/page"),
+);
+const InstructorReportsPage = lazy(
+  () => import("./dashboard/instructor/reports/page"),
+);
+const InstructorTasksPage = lazy(
+  () => import("./dashboard/instructor/tasks/page"),
+);
+const InstructorNotificationsPage = lazy(
+  () => import("./dashboard/instructor/notifications/page"),
+);
+const InstructorProfilePage = lazy(
+  () => import("./dashboard/instructor/profile/page"),
+);
+const InternProfilePage = lazy(() => import("./dashboard/intern/profile/page"));
+const AdminProfilePage = lazy(() => import("./dashboard/admin/profile/page"));
 
 function NotFoundPage() {
   return (
@@ -38,7 +92,6 @@ function NotFoundPage() {
   );
 }
 
-
 function AdminReportsPlaceholder() {
   return (
     <div
@@ -55,89 +108,97 @@ function AdminReportsPlaceholder() {
   );
 }
 
-function AdminMessagesPlaceholder() {
-  return (
-    <div
-      className="rounded-[14px] border p-8"
-      style={{
-        borderColor: "var(--line)",
-        backgroundColor: "var(--surface)",
-      }}
-    >
-      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
-        Admin Messages — coming later.
-      </p>
-    </div>
-  );
-}
-
-function AdminNotificationsPlaceholder() {
-  return (
-    <div
-      className="rounded-[14px] border p-8"
-      style={{
-        borderColor: "var(--line)",
-        backgroundColor: "var(--surface)",
-      }}
-    >
-      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
-        Admin Notifications — coming later.
-      </p>
-    </div>
-  );
-}
 
 export function App() {
   return (
-    <>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/verify-login" element={<VerifyLogin />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/intern"
-          element={
-            <ProtectedRoute>
-              <InternLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<InternOverviewPage />} />
-          <Route path="reports" element={<InternReportsPage />} />
-          <Route path="messages" element={<InternMessagesPage />} />
-          <Route path="notifications" element={<InternNotificationsPage />} />
-        </Route>
-
-        <Route
-          path="/dashboard/admin"
-          element={
-            <ProtectedRoute allowedRoles={["ADMIN"]}>
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<AdminOverviewPage />} />
-          <Route path="pending" element={<AdminPendingPage />} />
-          <Route path="interns" element={<AdminAllInternsPage />} />
-          <Route path="instructors" element={<AdminInstructorsPage />} />
-          <Route path="reports" element={<AdminReportsPlaceholder />} />
-          <Route path="messages" element={<AdminMessagesPlaceholder />} />
+    <main>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<MarketingPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/verify-login" element={<VerifyLoginPage />} />
           <Route
-            path="notifications"
-            element={<AdminNotificationsPlaceholder />}
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardRedirectPage />
+              </ProtectedRoute>
+            }
           />
-        </Route>
-      </Routes>
-    </>
+
+          {/* Intern */}
+          <Route
+            path="/dashboard/intern"
+            element={
+              <ProtectedRoute allowedRoles={["INTERN"]}>
+                <InternLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<InternOverviewPage />} />
+            <Route path="reports" element={<InternReportsPage />} />
+            <Route path="tasks" element={<InternTasksPage />} />
+            <Route path="messages" element={<InternMessagesPage />} />
+            <Route path="notifications" element={<InternNotificationsPage />} />
+            <Route path="profile" element={<InternProfilePage />} />
+          </Route>
+
+          {/* Admin */}
+          <Route
+            path="/dashboard/admin"
+            element={
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminOverviewPage />} />
+            <Route path="pending" element={<AdminPendingPage />} />
+            <Route path="interns" element={<AdminAllInternsPage />} />
+            <Route path="instructors" element={<AdminInstructorsPage />} />
+            <Route path="reports" element={<AdminReportsPlaceholder />} />
+            <Route path="messages" element={<AdminMessagesPage />} />
+            <Route path="profile" element={<AdminProfilePage />} />
+            <Route path="notifications" element={<AdminNotificationsPage />} />
+          </Route>
+
+          {/* Instructor */}
+          <Route
+            path="/dashboard/instructor"
+            element={
+              <ProtectedRoute allowedRoles={["INSTRUCTOR"]}>
+                <InstructorLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<InstructorOverviewPage />} />
+            <Route path="interns" element={<InstructorInternsPage />} />
+            <Route path="reports" element={<InstructorReportsPage />} />
+            <Route path="messages" element={<InstructorMessagesPage />} />
+            <Route path="tasks" element={<InstructorTasksPage />} />
+            <Route
+              path="notifications"
+              element={<InstructorNotificationsPage />}
+            />
+            <Route path="profile" element={<InstructorProfilePage />} />
+          </Route>
+
+        </Routes>
+      </Suspense>
+    </main>
   );
+}
+
+function RouteFallback() {
+  const location = useLocation();
+  const path = location.pathname;
+
+  if (path.startsWith("/dashboard")) {
+    return <DashboardSkeleton />;
+  }
+
+  // Marketing / other routes: simple spinner
+  return null;
 }

@@ -120,7 +120,11 @@ export function AcceptWizard({
       };
       if (startDate) configPayload.school_start_date = startDate;
       if (endDate) configPayload.school_end_date = endDate;
-      if (instructorId) configPayload.instructor_id = instructorId;
+      const UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (instructorId && UUID_RE.test(instructorId)) {
+        configPayload.instructor_id = instructorId;
+      }
 
       const configRes = await fetch(
         `http://localhost:8000/api/admin/interns/${submission.id}/configure/`,
@@ -159,7 +163,20 @@ export function AcceptWizard({
           throw new Error(uploadData?.error || "Failed to upload documents");
         }
       }
+      // ✅ AUTO-GENERATE MISSING DOCUMENTS
+      // If the admin didn't manually upload an acceptance letter or code of conduct,
+      // generate them automatically using the intern's submitted data.
+      await fetch(
+        `http://localhost:8000/api/admin/interns/${submission.id}/documents/generate/`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ only_missing: true }),
+        }
+      ).catch(() => null); // Fail silently if PDF generation fails
 
+      
       // Success: notify parent + close directly (not via handleClose,
       // which would no-op while `submitting` is still true).
       onCompleted();

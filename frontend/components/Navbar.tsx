@@ -15,7 +15,7 @@ export default function Navbar() {
     <nav className="w-full px-10 py-5 flex items-center justify-between border-b border-white/10 backdrop-blur-sm sticky top-0 z-50 bg-ec-dark/90">
       
       <div className="flex items-center gap-2">
-        <img src="/earlycode_logo.webp" alt="" className="w-10 h-auto" />
+        <img src="/earlycode_logo.webp" alt="" width={40} height={40} className="w-10 h-auto" />
         <div className="flex flex-col gap-0">
           <p className="text-xl font-bold tracking-wide uppercase font-nav">
             Early Code

@@ -19,6 +19,7 @@ export type DashboardStats = {
   tasks_pending: number;
   tasks_completed: number;
   unread_messages: number;
+  unread_conversations: number;
   unread_notifications: number;
 };
 

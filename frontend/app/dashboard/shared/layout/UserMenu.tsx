@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChevronDown, LogOut, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/contexts/useAuth";
 import { Avatar } from "../data/Avatar";
 
+/**
+ * Roles that have a profile page get the dropdown item.
+ * Add a path here when a role's profile page is built and the
+ * menu item appears for that role automatically.
+ */
+const PROFILE_ROUTES: Record<string , string> =
+  {
+  ADMIN: "/dashboard/admin/profile",
+  INSTRUCTOR: "/dashboard/instructor/profile",
+  INTERN: "/dashboard/intern/profile",
+  };
 export function UserMenu() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -22,6 +35,7 @@ export function UserMenu() {
 
   if (!user) return null;
 
+  const profilePath = PROFILE_ROUTES[user.role];
   const roleLabel =
     user.role === "ADMIN"
       ? "Admin"
@@ -87,22 +101,27 @@ export function UserMenu() {
             </p>
           </div>
 
-          <button
-            type="button"
-            role="menuitem"
-            className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-left transition-colors"
-            style={{ color: "var(--text)" }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--surface2)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.backgroundColor = "transparent")
-            }
-            onClick={() => setOpen(false)}
-          >
-            <UserIcon size={16} strokeWidth={1.75} />
-            Profile
-          </button>
+          {profilePath && (
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full flex items-center gap-3 px-4 py-3 text-[13px] font-medium text-left transition-colors"
+              style={{ color: "var(--text)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--surface2)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "transparent")
+              }
+              onClick={() => {
+                navigate(PROFILE_ROUTES[user.role]);
+                setOpen(false)
+              }}
+            >
+              <UserIcon size={16} strokeWidth={1.75} />
+              Profile
+            </button>
+          )}
 
           <button
             type="button"

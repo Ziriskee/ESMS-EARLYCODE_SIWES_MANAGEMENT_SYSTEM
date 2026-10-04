@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import type { Notification } from "../hooks/useNotifications";
+import type { Notification } from "../../hooks/useNotifications";
 import { getNotificationMeta } from "./notificationMeta";
 import { formatNotificationTime } from "./relativeTime";
 
@@ -14,9 +14,7 @@ export function NotificationRow({
 }: NotificationRowProps) {
   const meta = getNotificationMeta(notification.type);
   const Icon = meta.icon;
-
   const { is_read } = notification;
-
   const titleColor = is_read ? "var(--muted)" : "var(--text)";
   const titleWeight = is_read ? 500 : 600;
   const bodyColor = "var(--muted)";
@@ -33,7 +31,6 @@ export function NotificationRow({
           style={{ color: `var(${meta.iconToken})` }}
         />
       </div>
-
       <div className="flex-1 min-w-0">
         <p
           className="text-[14px] leading-snug"
@@ -45,7 +42,6 @@ export function NotificationRow({
           {formatNotificationTime(notification.created_at)}
         </p>
       </div>
-
       {!is_read && (
         <div className="flex flex-col items-end gap-2 shrink-0 pt-1">
           <span
@@ -56,7 +52,7 @@ export function NotificationRow({
           <button
             type="button"
             onClick={() => onMarkRead(notification.id)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 rounded-full flex items-center justify-center"
+            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 px-3 rounded-full flex items-center gap-1.5 text-[12px] font-semibold"
             style={{
               backgroundColor: "var(--surface2)",
               border: "1px solid var(--line)",
@@ -65,7 +61,8 @@ export function NotificationRow({
             aria-label="Mark as read"
             title="Mark as read"
           >
-            <Check size={13} strokeWidth={2} />
+            <Check size={14} strokeWidth={2} />
+            <span>Read</span>
           </button>
         </div>
       )}

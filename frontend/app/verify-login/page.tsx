@@ -1,38 +1,44 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiFetch } from "../../lib/api";
 import { useAuth } from "@/contexts/useAuth";
 
 export default function VerifyLoginPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-
+  const { refetch } = useAuth();
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
-
-  const [status, setStatus] = useState<"loading" | "error">(
-    token ? "loading" : "error",
-  );
+  const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [status] = useState<"loading" | "error">(token ? "loading" : "error");
 
   useEffect(() => {
     if (!token) return;
 
     const verify = async () => {
+      setVerifying(true);
+      setError(null);
       try {
-        await apiFetch(
-           `/auth/verify-magic-link/?token=${token}`
+        const res = await fetch(
+          `http://localhost:8000/api/auth/verify-magic-link/?token=${encodeURIComponent(token)}`,
+          { credentials: "include" },
         );
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.error || "Invalid or expired link");
+        }
 
-        await refreshUser();
+        // ✅ CRITICAL: populate useAuth BEFORE navigating.
+        await refetch();
 
         navigate("/dashboard", { replace: true });
-      } catch {
-        setStatus("error");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+        setVerifying(false);
       }
     };
 
     verify();
-  }, [token, refreshUser, navigate]);
+  }, [token, refetch, navigate, searchParams]);
 
   if (status === "error") {
     return (
@@ -57,7 +63,7 @@ export default function VerifyLoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-ec-dark text-white">
-      Logging you in...
+      {verifying && !error ? "Logging you in..." : error || "Logging you in..."}
     </div>
   );
 }

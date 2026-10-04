@@ -55,10 +55,10 @@
   --sidebar-nav-active-bg: var(--gold-500);
   --sidebar-nav-active-text: var(--coal);
   --sidebar-nav-hover: var(--tint);
-  --sidebar-badge-bg: var(--surface2);
-  --sidebar-badge-bg-active: rgba(27, 22, 7, 0.15);
-  --sidebar-badge-text: var(--muted);
-  --sidebar-badge-text-active: var(--coal);
+  --sidebar-badge-bg: var(--gold-500);
+  --sidebar-badge-bg-active: var(--coal);
+  --sidebar-badge-text: var(--coal);
+  --sidebar-badge-text-active: var(--gold-500);
 
   /* ---------- Modal ---------- */
   --modal-bg: var(--surface);
@@ -134,10 +134,10 @@
   --sidebar-nav-active-bg: #ffd60a;
   --sidebar-nav-active-text: #1b1607;
   --sidebar-nav-hover: rgba(23, 22, 26, 0.05);
-  --sidebar-badge-bg: #ece9e0;
-  --sidebar-badge-bg-active: rgba(27, 22, 7, 0.15);
-  --sidebar-badge-text: #6e6c75;
-  --sidebar-badge-text-active: #1b1607;
+  --sidebar-badge-bg: #ffd60a;
+  --sidebar-badge-bg-active: #1b1607;
+  --sidebar-badge-text: #1b1607;
+  --sidebar-badge-text-active: #ffd60a;
 
   --modal-backdrop: rgba(0, 0, 0, 0.35);
 }

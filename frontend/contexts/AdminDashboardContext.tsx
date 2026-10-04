@@ -1,34 +1,28 @@
-import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "../../../../lib/api";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { apiFetch } from "@/lib/api";
 import type {
   AdminDashboardStats,
-  PendingInternSummary,
   PendingInternsResponse,
-} from "../types";
+} from "@/app/dashboard/admin/types";
+import {
+  AdminDashboardDataContext,
+  type AdminDashboardData,
+} from "./useAdminDashboardContext";
 
-type UseAdminDashboardResult = {
-  stats: AdminDashboardStats | null;
-  pending: PendingInternSummary[];
-  loading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
-};
-
-export function useAdminDashboard(): UseAdminDashboardResult {
-  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
-  const [pending, setPending] = useState<PendingInternSummary[]>([]);
+export function AdminDashboardProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
       const [statsData, pendingData] = await Promise.all([
         apiFetch<AdminDashboardStats>("/admin/dashboard/"),
         apiFetch<PendingInternsResponse>("/admin/interns/pending/"),
       ]);
-      setStats(statsData);
-      setPending(pendingData.results ?? []);
+      setData({ stats: statsData, pending: pendingData.results ?? [] });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load admin data",
@@ -40,7 +34,6 @@ export function useAdminDashboard(): UseAdminDashboardResult {
 
   useEffect(() => {
     let isMounted = true;
-
     const run = async () => {
       try {
         const [statsData, pendingData] = await Promise.all([
@@ -48,8 +41,7 @@ export function useAdminDashboard(): UseAdminDashboardResult {
           apiFetch<PendingInternsResponse>("/admin/interns/pending/"),
         ]);
         if (!isMounted) return;
-        setStats(statsData);
-        setPending(pendingData.results ?? []);
+        setData({ stats: statsData, pending: pendingData.results ?? [] });
       } catch (err) {
         if (isMounted) {
           setError(
@@ -60,13 +52,17 @@ export function useAdminDashboard(): UseAdminDashboardResult {
         if (isMounted) setLoading(false);
       }
     };
-
     run();
-
     return () => {
       isMounted = false;
     };
   }, []);
 
-  return { stats, pending, loading, error, refetch: fetchAll };
+  return (
+    <AdminDashboardDataContext.Provider
+      value={{ data, loading, error, refetch: fetchData }}
+    >
+      {children}
+    </AdminDashboardDataContext.Provider>
+  );
 }

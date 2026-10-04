@@ -6,6 +6,7 @@ Register all models in the Django admin panel for easy management.
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
+    Conversation,
     User,
     AdminProfile,
     InstructorProfile,
@@ -138,12 +139,19 @@ class ReportAdmin(admin.ModelAdmin):
     date_hierarchy = "submitted_at"
 
 
+@admin.register(Conversation)
+class ConversationAdmin(admin.ModelAdmin):
+    list_display = ("id", "initiator", "recipient", "updated_at", "created_at")
+    search_fields = ("initiator__email", "recipient__email")
+    list_filter = ("created_at",)
+
+
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ["sender", "recipient", "sent_at", "is_read"]
-    list_filter = ["is_read", "sent_at"]
-    search_fields = ["sender__email", "recipient__email", "content"]
-    date_hierarchy = "sent_at"
+    list_display = ("id", "sender", "conversation", "is_read", "created_at")
+    list_filter = ("is_read", "created_at")
+    search_fields = ("sender__email", "body", "conversation__initiator__email")
+    date_hierarchy = "created_at"
 
 
 @admin.register(Notification)

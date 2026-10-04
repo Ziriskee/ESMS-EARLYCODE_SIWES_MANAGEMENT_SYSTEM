@@ -15,11 +15,16 @@ type SortOrder = "NEWEST" | "OLDEST";
 
 function chipForStatus(status: ReportStatus) {
   switch (status) {
+    case "APPROVED":
+      return { tone: "approved" as const, label: "Approved" };
+    case "NEEDS_REVISION":
+      return { tone: "action" as const, label: "Needs revision" };
     case "REVIEWED":
       return { tone: "approved" as const, label: "Reviewed" };
     case "SUBMITTED":
       return { tone: "review" as const, label: "Submitted" };
     case "DRAFT":
+    default:
       return { tone: "neutral" as const, label: "Draft" };
   }
 }

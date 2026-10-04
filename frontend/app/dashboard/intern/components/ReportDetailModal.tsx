@@ -17,11 +17,16 @@ function chipFor(status: ReportStatus): {
   label: string;
 } {
   switch (status) {
+    case "APPROVED":
+      return { tone: "approved", label: "Approved" };
+    case "NEEDS_REVISION":
+      return { tone: "action", label: "Needs revision" };
     case "REVIEWED":
       return { tone: "approved", label: "Reviewed" };
     case "SUBMITTED":
       return { tone: "review", label: "Submitted" };
     case "DRAFT":
+    default:
       return { tone: "neutral", label: "Draft" };
   }
 }
@@ -47,10 +52,12 @@ export function ReportDetailModal({
 
   const chip = chipFor(report.status);
   const isDraft = report.status === "DRAFT";
-  const hasFeedback =
-    report.status === "REVIEWED" &&
-    report.instructor_feedback &&
-    report.instructor_feedback.trim().length > 0;
+const hasFeedback =
+  (report.status === "REVIEWED" ||
+    report.status === "APPROVED" ||
+    report.status === "NEEDS_REVISION") &&
+  report.instructor_feedback &&
+  report.instructor_feedback.trim().length > 0;
 
   const meta = (
     <span className="inline-flex items-center gap-2 flex-wrap">

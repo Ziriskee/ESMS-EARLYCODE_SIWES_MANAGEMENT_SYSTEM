@@ -10,6 +10,8 @@ type TopBarProps = {
   subtitle?: string;
   notificationCount?: number;
   onOpenMobileNav?: () => void;
+  /** Where the bell navigates. Omit to keep the bell inert. */
+  onNotificationClick?: () => void;
 };
 
 export function TopBar({
@@ -17,6 +19,7 @@ export function TopBar({
   subtitle,
   notificationCount = 0,
   onOpenMobileNav,
+  onNotificationClick,
 }: TopBarProps) {
     const { user } = useAuth();
     const showCampusFilter = user?.role === "ADMIN";
@@ -70,7 +73,10 @@ export function TopBar({
         <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
           {showCampusFilter && <CampusFilter />}
           <ThemeToggle />
-          <NotificationBell count={notificationCount} />
+          <NotificationBell
+            count={notificationCount}
+            onClick={onNotificationClick}
+          />
           <UserMenu />
         </div>
       </div>

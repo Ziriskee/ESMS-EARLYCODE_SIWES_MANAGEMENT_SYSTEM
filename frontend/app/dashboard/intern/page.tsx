@@ -7,8 +7,10 @@ import { ScheduleModal } from "./components/ScheduleModal";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { Card } from "../shared/ui/Card";
 import { useDashboardDataContext } from "@/contexts/useDashboardDataContext";
+import { useNavigate } from "react-router-dom";
 
 export default function InternOverviewPage() {
+  const navigate = useNavigate();
   const { data, loading, error } = useDashboardDataContext();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -62,7 +64,7 @@ export default function InternOverviewPage() {
       <RecentReportsCard
         reports={recent_reports}
         onOpenReport={(id) => {
-          console.log("open report", id);
+          navigate(`/dashboard/intern/reports`, { state: { openId: id } });
         }}
       />
 

@@ -77,7 +77,7 @@ export default function AdminPendingPage() {
         onEdit={() => setEditOpen(true)}
       />
       <EditSubmissionModal
-        key={selectedId ?? "none"}
+        key={selectedId ? `edit-${selectedId}` : "edit-closed"}
         open={editOpen}
         onClose={() => setEditOpen(false)}
         submission={submission}
@@ -85,7 +85,9 @@ export default function AdminPendingPage() {
       />
 
       <AcceptWizard
-        key={wizardSubmission?.id ?? "empty"}
+        key={
+          wizardSubmission ? `wizard-${wizardSubmission.id}` : "wizard-closed"
+        }
         open={wizardOpen}
         onClose={handleWizardClose}
         submission={wizardSubmission}

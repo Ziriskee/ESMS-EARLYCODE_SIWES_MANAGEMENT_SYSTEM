@@ -129,7 +129,7 @@ export default function AdminAllInternsPage() {
         onEdit={() => setEditOpen(true)}
       />
       <EditSubmissionModal
-        key={selectedId ?? "none"}
+        key={selectedId ? `edit-${selectedId}` : "edit-closed"}
         open={editOpen}
         onClose={() => setEditOpen(false)}
         submission={submission}
@@ -137,7 +137,9 @@ export default function AdminAllInternsPage() {
       />
 
       <AcceptWizard
-        key={wizardSubmission?.id ?? "empty"}
+        key={
+          wizardSubmission ? `wizard-${wizardSubmission.id}` : "wizard-closed"
+        }
         open={wizardOpen}
         onClose={() => {
           setWizardOpen(false);
@@ -148,7 +150,7 @@ export default function AdminAllInternsPage() {
       />
 
       <AssignInstructorModal
-        key={assignIntern?.id ?? "none"}
+        key={assignIntern ? `assign-${assignIntern.id}` : "assign-closed"}
         open={assignIntern !== null}
         onClose={() => setAssignIntern(null)}
         intern={assignIntern}

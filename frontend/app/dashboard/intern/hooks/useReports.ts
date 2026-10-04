@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../../../lib/api";
 
-export type ReportStatus = "DRAFT" | "SUBMITTED" | "REVIEWED";
+export type ReportStatus = "DRAFT" | "SUBMITTED" | "REVIEWED" | "APPROVED" | "NEEDS_REVISION";
 
 export type Report = {
   id: string;

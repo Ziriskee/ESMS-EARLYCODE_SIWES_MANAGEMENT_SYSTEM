@@ -1,0 +1,224 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page {
+        size: A4;
+        margin: 1.85cm;
+        margin-bottom: 2.8cm;
+
+        @frame footer_frame {
+          -pdf-frame-content: footerContent;
+          bottom: 0.5cm;
+          left: 1.85cm;
+          right: 1.85cm;
+          height: 2cm;
+        }
+      }
+      {% if fonts_dir %}
+      @font-face {
+        font-family: "SourceSans3";
+        src: url({{ fonts_dir }}/SourceSans3-Regular.ttf);
+      }
+      @font-face {
+        font-family: "SourceSans3";
+        font-weight: bold;
+        src: url({{ fonts_dir }}/SourceSans3-Bold.ttf);
+      }
+      @font-face {
+        font-family: "SourceSans3";
+        font-style: italic;
+        src: url({{ fonts_dir }}/SourceSans3-Italic.ttf);
+      }
+      {% endif %}
+      body {
+        font-family: "SourceSans3", "Lucida Sans", "Lucida Sans Regular",
+          "Lucida Grande", "Lucida Sans Unicode", Geneva, Verdana, sans-serif;
+        font-size: 11pt;
+        line-height: 1.55;
+        color: #000;
+      }
+      .company {
+        font-size: 16pt;
+        font-weight: bold;
+        margin-bottom: 5px;
+        text-align: right;
+        color: #2acbe3;
+      }
+      .addr {
+        font-size: 10pt;
+        margin-bottom: 15px;
+        text-align: right;
+        color: gray;
+      }
+      h1 {
+        font-size: 14pt;
+        text-align: center;
+        margin: 18px 0 14px 0;
+      }
+      h2 {
+        font-size: 12pt;
+        margin: 14px 0 6px 0;
+      }
+      p {
+        margin: 0 0 10px 0;
+        text-align: justify;
+      }
+      ul,
+      ol {
+        margin: 0 0 10px 0;
+        padding-left: 22px;
+      }
+      li {
+        margin-bottom: 5px;
+      }
+      .name {
+        font-weight: bold;
+        margin: 16px 0 8px 0;
+        font-size: 12pt;
+      }
+      .week {
+        margin: 0 0 8px 0;
+      }
+      .note {
+        font-size: 10pt;
+        font-style: italic;
+        margin-top: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="text-align: right;">
+      {% if logo_data_uri %}
+      <img
+        src="{{ logo_data_uri }}"
+        alt="Early Code Logo"
+        style="width: 60px; height: auto; margin-bottom: 10px;"
+      />
+      {% endif %}
+    </div>
+    <div class="company">Early Code Ltd</div>
+    <div class="addr">
+      Plot B53 Gado Nasko Road<br />Kubwa, Abuja, FCT-Abuja<br />Nigeria
+    </div>
+
+    <h1>CODE OF CONDUCT FOR EARLY CODE INTERNS</h1>
+
+    <p>
+      We are excited to welcome you to our team as an intern. You will be
+      engaged in hands-on activities that will give you the right experience
+      to take on a job with little or no supervision. The Institution expects
+      its interns to uphold ethical standards of punctuality, promptness,
+      accuracy, probity, and innovation.
+    </p>
+
+    <p>As an intern, you are to be responsible for:</p>
+    <ul>
+      <li>Fulfilling tasks set out by supervisors.</li>
+      <li>Performing research at a supervisor's request.</li>
+      <li>Personal Development.</li>
+      <li>Other added responsibilities.</li>
+    </ul>
+
+    <p>
+      Your mode of operation as an intern would be physical, which means you
+      would be required to:
+    </p>
+    <ol type="i">
+      <li>Attend your regular class sessions (3 days weekly) or weekend class sessions.</li>
+      <li>Be in the office on Thursdays for your Intern shift.</li>
+    </ol>
+
+    <h2>A. Code of Conduct for (ii):</h2>
+    <p>You are to be:</p>
+    <ol type="a">
+      <li>Well-dressed in neat and well-ironed clothes and suitable covered shoes whenever coming to work. Kindly note that Wednesday's dress attire is Traditional, and you are expected to appear in it if you have been assigned Wednesday to be in the office.</li>
+      <li>Speak good English when responding to customers or other staff members, except when customers expressly prefer to interact in different languages.</li>
+      <li>Respectful to staff, carry out tasks given to you, and be up to date with the projects assigned to you by your supervisor.</li>
+      <li>Open to learning new things outside the confines of your expertise.</li>
+      <li>Consistent in filling your log books EVERY WEEK; negligence would result in the withholding of your supervisor's signature.</li>
+      <li>Sitting only in designated seats for an intern.</li>
+      <li>Conscious of your surroundings and handle every property of the institution with care, including the seats, walls, dispenser, restroom, and devices.</li>
+      <li>Cordial, if not professional, with fellow interns.</li>
+    </ol>
+
+    <p>
+      All assignments given during your internship MUST always be completed
+      and submitted before the set deadline.
+    </p>
+    <p>
+      Non-adherence to the above-mentioned conduct in (A): the institution
+      reserves the right to terminate your internship program. We look forward
+      to having you on our team and having a progressive internship period
+      with us.
+    </p>
+
+    <h2>Shift Timing</h2>
+    <p>
+      Please note the timing of these shifts and adjust accordingly.<br />
+      Morning: 8:30 AM &ndash; 1:00 PM &nbsp;&nbsp;&nbsp; Afternoon: 1:00 PM
+      &ndash; 6:00 PM
+    </p>
+    <p>
+      Early and prompt attendance and departure from the office MUST BE
+      adhered to at all times. You are expected to arrive at the office before
+      or by 8:30 AM and 1:00 PM on your scheduled days.
+    </p>
+    <p>If, for any reason, you will not be around on your stated day, you are required to:</p>
+    <ul>
+      <li>Give a 24&ndash;48 hour notice in advance.</li>
+      <li>Wait for explicit approval before being excused.</li>
+      <li>For medical absences, provide a doctor's report upon your return.</li>
+    </ul>
+
+    <h2>Projects</h2>
+    <p>
+      During your internship, you are to complete 2&ndash;3 personal projects,
+      aside from class projects. One of your projects is compulsory &mdash;
+      your personal Portfolio &mdash; and should be completed before the end
+      of your internship.
+    </p>
+    <p>
+      There should be no excuses for absence without permission. The penalty
+      for unauthorized absence or lateness will be termination in severe or
+      repeated cases.
+    </p>
+
+    <div class="name">{{ full_name }}</div>
+
+    {% for line in shift_lines %}
+    <div class="week">
+      <strong>WEEK {{ line.week }}:</strong><br />
+      {{ line.day }}: {{ line.shift }} Shift
+    </div>
+    {% endfor %}
+
+    <p class="note">
+      Be aware that this schedule is subject to change. For more information
+      or clarity regarding this schedule, contact the office via call or
+      WhatsApp.
+    </p>
+
+    <div id="footerContent">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="width: 68%; font-size: 8pt; color: gray; vertical-align: middle; white-space: nowrap;">
+            Telephone: +234 708 777 7367 | email: info@earlycode.net | website: earlycode.net
+          </td>
+          <td style="width: 32%; vertical-align: middle;" align="right">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background-color: #2acbe3; width: 55px; height: 12px;"></td>
+                <td style="width: 3px;"></td>
+                <td style="background-color: orange; width: 18px; height: 4px;"></td>
+                <td style="width: 3px;"></td>
+                <td style="background-color: red; width: 30px; height: 4px;"></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

@@ -3,16 +3,17 @@ SIWES Management System - Django REST Framework Serializers
 Serializers convert Django model instances to JSON for the React frontend.
 """
 
+
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import (
     InternDocument,
+    TaskAttachment,
     User,
     AdminProfile,
     InstructorProfile,
     InternProfile,
     Course,
-    InternCourse,
     ScheduleSlot,
     InternSchedule,
     Task,
@@ -479,13 +480,40 @@ class InternScheduleSerializer(serializers.ModelSerializer):
 # TASK SERIALIZERS
 # ───────────────────────────────────────────────────────────────
 
+class TaskAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskAttachment
+        fields = ["id", "file", "uploaded_at"]
+
 
 class TaskSerializer(serializers.ModelSerializer):
-    instructor = InstructorProfileSerializer(read_only=True)
+    """Task shape nested inside assignments (used by intern endpoints)."""
+
+    instructor = serializers.SerializerMethodField()
+    attachments = TaskAttachmentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Task
-        fields = ["id", "title", "description", "instructor", "due_date", "created_at"]
+        fields = [
+            "id",
+            "title",
+            "description",
+            "due_date",
+            "created_at",
+            "instructor",
+            "attachments",
+        ]
+
+    def get_instructor(self, obj):
+        user = obj.instructor.user
+        return {
+            "user": {
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email,
+            },
+            "department": obj.instructor.department,
+        }
 
 
 class TaskAssignmentSerializer(serializers.ModelSerializer):
@@ -502,6 +530,62 @@ class TaskAssignmentSerializer(serializers.ModelSerializer):
             "submitted_at",
             "instructor_feedback",
             "created_at",
+            "submission_file",
+        ]
+
+
+class InstructorTaskSerializer(serializers.ModelSerializer):
+    """
+    Rich task shape for the instructor's own task list: assignment
+    counts, attachments, and per-intern assignment rows.
+    """
+
+    assigned_count = serializers.SerializerMethodField()
+    submitted_count = serializers.SerializerMethodField()
+    attachments = TaskAttachmentSerializer(many=True, read_only=True)
+    assignments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Task
+        fields = [
+            "id",
+            "title",
+            "description",
+            "due_date",
+            "created_at",
+            "assigned_count",
+            "submitted_count",
+            "attachments",
+            "assignments",
+        ]
+
+    def get_assigned_count(self, obj):
+        return obj.assignments.count()
+
+    def get_submitted_count(self, obj):
+        return obj.assignments.filter(
+            status__in=[
+                TaskAssignment.Status.SUBMITTED,
+                TaskAssignment.Status.REVIEWED,
+            ]
+        ).count()
+
+    def get_assignments(self, obj):
+        return [
+            {
+                "id": str(a.id),
+                "intern": {
+                    "id": a.intern.pk,
+                    "name": a.intern.user.get_full_name(),
+                },
+                "status": a.status,
+                "submitted_at": a.submitted_at,
+                "instructor_feedback": a.instructor_feedback,
+                "submission_file_url": (
+                    a.submission_file.url if a.submission_file else None
+                ),
+            }
+            for a in obj.assignments.select_related("intern__user").all()
         ]
 
 
@@ -563,20 +647,6 @@ class RecentReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
         fields = ["id", "title", "submitted_at", "status"]
-
-
-# ───────────────────────────────────────────────────────────────
-# MESSAGE SERIALIZERS
-# ───────────────────────────────────────────────────────────────
-
-
-class MessageSerializer(serializers.ModelSerializer):
-    sender = UserSerializer(read_only=True)
-    recipient = UserSerializer(read_only=True)
-
-    class Meta:
-        model = Message
-        fields = ["id", "sender", "recipient", "content", "sent_at", "is_read"]
 
 
 # ───────────────────────────────────────────────────────────────

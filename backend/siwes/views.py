@@ -4,19 +4,31 @@ from django.core.mail import send_mail
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.utils import timezone
 from rest_framework import generics, permissions, serializers, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
-from django.db import transaction
+from django.db import models, transaction
 from rest_framework_simplejwt.tokens import AccessToken
 from urllib.parse import quote
 from datetime import timedelta
-from django.core.files.base import (ContentFile,)  
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import PageNumberPagination
+import io
+from django.core.files.base import ContentFile
+from django.template.loader import render_to_string
+from xhtml2pdf import pisa
+from django.core.mail import EmailMultiAlternatives
+import base64
+from pathlib import Path
+from django.db.models import Q, Count, QuerySet,Exists,OuterRef
+from typing import Any, Optional
+from rest_framework.request import Request
+from .throttles import MagicLinkThrottle, RegisterThrottle
 
 from .models import (
+    Conversation,
     InternDocument,
     ScheduleSlot,
+    TaskAttachment,
     User,
     InstructorProfile,
     InternProfile,
@@ -33,6 +45,7 @@ from .serializers import (
     AdminInstructorSerializer,
     AdminInternListSerializer,
     InstructorCreateSerializer,
+    InstructorTaskSerializer,
     InstructorUpdateSerializer,
     InternDocumentSerializer,
     InternDocumentUploadSerializer,
@@ -44,10 +57,8 @@ from .serializers import (
     InternProfileSerializer,
     CourseSerializer,
     InternScheduleSerializer,
-    TaskSerializer,
     TaskAssignmentSerializer,
     ReportSerializer,
-    MessageSerializer,
     NotificationSerializer,
     InternRegisterSerializer,
 )
@@ -64,7 +75,7 @@ signer = TimestampSigner()
 
 class InternRegisterView(generics.CreateAPIView):
     """Register a new intern. No password required — magic link login."""
-
+    throttle_classes = [RegisterThrottle]
     queryset = User.objects.all()
     serializer_class = InternRegisterSerializer
     permission_classes = [permissions.AllowAny]
@@ -129,9 +140,12 @@ class InternRegisterView(generics.CreateAPIView):
                 InternCourse.objects.create(intern=intern, course=course)
 
         # Send welcome email with magic link (outside transaction)
-        self._send_welcome_email(user) 
-        # Notify all admins a new registration awaits review
-        self._notify_admins(user, intern)
+        self._send_welcome_email(user)
+        # Notify all admins a new registration awaits review (email)
+        _notify_admins(user, intern)
+
+        # In-app notification to every active admin (bell + feed)
+        _notify_admins_in_app(user)
 
         return Response(
             {
@@ -172,8 +186,9 @@ class InternRegisterView(generics.CreateAPIView):
 
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([MagicLinkThrottle])
 def request_magic_link(request):
-    """User enters email → Django sends magic link."""
+    """User enters email → Django sends magic link as HTML email."""
     raw_email = request.data.get("email", "")
     email = raw_email.strip().lower()
 
@@ -185,33 +200,23 @@ def request_magic_link(request):
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        # Don't reveal if email exists or not (security)
         return Response(
             {"message": "If an account exists, a login link has been sent."}
         )
 
-    # 1. Generate and safely encode the token
     token = signer.sign(user.email)
     safe_token = quote(token)
 
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
     magic_link = f"{frontend_url}/verify-login?token={safe_token}"
 
-    # 🛡️ BULLETPROOF DEV LOG: Bypasses email encoding (=3D and line breaks)
     if settings.DEBUG:
         print("\n" + "🟢" * 30)
         print(f"🔗 MAGIC LINK FOR {user.email}:")
         print(magic_link)
         print("🟢" * 30 + "\n")
 
-    # 2. Send the actual email (In production, Gmail/SMTP handles the decoding automatically)
-    send_mail(
-        subject="Your EarlyCode SIWES Login Link",
-        message=f"Hi {user.first_name or 'there'},\n\nClick this link to log in:\n{magic_link}\n\n- EarlyCode Team",
-        from_email="noreply@earlycode.com",
-        recipient_list=[user.email],
-        fail_silently=True,
-    )
+    _send_magic_link_email(user, magic_link)
 
     return Response({"message": "If an account exists, a login link has been sent."})
 
@@ -221,44 +226,46 @@ def request_magic_link(request):
 def verify_magic_link(request):
     """
     User clicks magic link → Django verifies token, sets httpOnly session cookie.
+    Tries multiple candidate tokens to survive quoted-printable mail damage.
     """
-    token = request.query_params.get("token")
+    raw_token = request.query_params.get("token")
 
-    # ✅ TEMPORARY DEBUG: Print the raw token
-    print(f"\n🔍 RAW TOKEN: {token}")
-    print(f"🔍 TOKEN LENGTH: {len(token) if token else 0}")
+    if settings.DEBUG:
+        print(f"\n🔍 RAW TOKEN: {raw_token}")
+        print(f"🔍 TOKEN LENGTH: {len(raw_token) if raw_token else 0}")
 
-    if not token:
+    if not raw_token:
         return Response(
             {"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    try:
-        print(f"🔍 ATTEMPTING TO UNSIGN: {token[:50]}...")
-        email = signer.unsign(token, max_age=settings.MAGIC_LINK_MAX_AGE)
-        print(f"✅ UNSIGN SUCCESS: {email}")
-        user = User.objects.get(email__iexact=email.strip().lower())
-    except SignatureExpired as e:
-        print(f"❌ SIGNATURE EXPIRED: {e}")
-        return Response(
-            {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
-        )
-    except BadSignature as e:
-        print(f"❌ BAD SIGNATURE: {e}")
-        return Response(
-            {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
-        )
-    except User.DoesNotExist as e:
-        print(f"❌ USER NOT FOUND: {e}")
+    candidates = _token_candidates(raw_token)
+
+    user = None
+    last_error = None
+    for candidate in candidates:
+        try:
+            if settings.DEBUG:
+                print(f"🔍 TRYING CANDIDATE: {candidate[:50]}...")
+            email = signer.unsign(candidate, max_age=settings.MAGIC_LINK_MAX_AGE)
+            user = User.objects.get(email__iexact=email.strip().lower())
+            if settings.DEBUG:
+                print(f"✅ UNSIGN SUCCESS: {email}")
+            break
+        except (SignatureExpired, BadSignature, User.DoesNotExist) as e:
+            last_error = e
+            continue
+
+    if user is None:
+        if settings.DEBUG:
+            print(f"❌ ALL CANDIDATES FAILED: {last_error}")
         return Response(
             {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Update last login
     user.last_login = timezone.now()
     user.save(update_fields=["last_login"])
 
-    # Create 12-hour session token
     access = AccessToken.for_user(user)
 
     response = Response(
@@ -280,6 +287,59 @@ def verify_magic_link(request):
     )
 
     return response
+
+
+def _send_magic_link_email(user, link):
+    """
+    Sends the magic link as multipart/alternative (text + HTML).
+    HTML survives quoted-printable mail transport intact.
+    """
+    subject = "Your EarlyCode SIWES Login Link"
+    text_body = (
+        f"Hi {user.first_name or 'there'},\n\n"
+        f"Click this link to log in:\n{link}\n\n"
+        "- EarlyCode Team"
+    )
+    html_body = (
+        f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;'>"
+        f"<p>Hi {user.first_name or 'there'},</p>"
+        f"<p>Click the button below to log in to your EarlyCode dashboard:</p>"
+        f"<p><a href='{link}' style='display:inline-block;padding:10px 22px;"
+        f"background:#FFD60A;color:#1B1607;text-decoration:none;"
+        f"border-radius:999px;font-weight:600;'>Log in to EarlyCode</a></p>"
+        f"<p style='color:#666;font-size:12px;'>Or copy this link:<br>"
+        f"<span style='word-break:break-all;'>{link}</span></p>"
+        f"<p style='color:#666;font-size:12px;'>- EarlyCode Team</p>"
+        f"</div>"
+    )
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email="noreply@earlycode.com",
+        to=[user.email],
+    )
+    msg.attach_alternative(html_body, "text/html")
+    msg.send(fail_silently=True)
+
+
+def _token_candidates(raw):
+    """
+    Repairs quoted-printable mail damage: soft line breaks and =3D artifacts.
+    Returns validation order, safest first.
+    """
+    base = "".join((raw or "").split())
+    no_eq = base.replace("=", "")
+    candidates = [raw, base, no_eq]
+    if base.startswith("3D"):
+        candidates.append(base[2:])
+    if no_eq.startswith("3D"):
+        candidates.append(no_eq[2:])
+    seen, ordered = set(), []
+    for c in candidates:
+        if c and c not in seen:
+            seen.add(c)
+            ordered.append(c)
+    return ordered
 
 
 class MeView(generics.RetrieveAPIView):
@@ -321,6 +381,16 @@ def admin_dashboard(request):
     active_interns = InternProfile.objects.filter(status="ACTIVE").count()
     total_reports = Report.objects.count()
     unread_reports = Report.objects.filter(status="SUBMITTED").count()
+    unread_conversations = Conversation.objects.filter(
+        Q(initiator=request.user) | Q(recipient=request.user),
+    ).filter(
+        Exists(
+            Message.objects.filter(
+                conversation=OuterRef("pk"),
+                is_read=False,
+            ).exclude(sender=request.user)
+        )
+    ).count()
 
     return Response(
         {
@@ -330,8 +400,46 @@ def admin_dashboard(request):
             "active_interns": active_interns,
             "total_reports": total_reports,
             "unread_reports": unread_reports,
+            "unread_conversations": unread_conversations,
         }
     )
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAdmin])
+def admin_own_profile(request):
+    """Admin's own profile; phone + campus editable."""
+    user = request.user
+    profile = getattr(user, "admin_profile", None)
+
+    if request.method == "PATCH":
+        data = request.data
+        update_fields = []
+        if "phone" in data:
+            user.phone = (data.get("phone") or "").strip()
+            update_fields.append("phone")
+        if update_fields:
+            user.save(update_fields=update_fields)
+        if profile is not None and "campus" in data:
+            profile.campus = (data.get("campus") or "").strip() or profile.campus
+            profile.save(update_fields=["campus"])
+
+    return Response(
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "campus": profile.campus if profile is not None else "",
+            "profile_picture": (
+                user.profile_picture.url
+                if getattr(user, "profile_picture", None)
+                else None
+            ),
+        }
+    )
+
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
@@ -341,8 +449,7 @@ def admin_pending_interns(request):
     each with a short summary of their submission.
     """
     pending = (
-        InternProfile.objects
-        .filter(
+        InternProfile.objects.filter(
             status=InternProfile.Status.PENDING,
             user__is_active=True,
         )
@@ -353,30 +460,34 @@ def admin_pending_interns(request):
     data = []
     for intern in pending:
         user = intern.user
-        data.append({
-            "id": str(intern.id),
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "phone": user.phone,
-                "gender": user.gender,
-            },
-            "preferred_campus": intern.preferred_campus,
-            "current_institution": intern.current_institution,
-            "course_of_study": intern.course_of_study,
-            "current_level": intern.current_level,
-            "school_start_date": intern.school_start_date,
-            "school_end_date": intern.school_end_date,
-            "internship_duration": intern.internship_duration,
-            "created_at": intern.created_at,
-        })
+        data.append(
+            {
+                "id": str(intern.id),
+                "user": {
+                    "id": str(user.id),
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "phone": user.phone,
+                    "gender": user.gender,
+                },
+                "preferred_campus": intern.preferred_campus,
+                "current_institution": intern.current_institution,
+                "course_of_study": intern.course_of_study,
+                "current_level": intern.current_level,
+                "school_start_date": intern.school_start_date,
+                "school_end_date": intern.school_end_date,
+                "internship_duration": intern.internship_duration,
+                "created_at": intern.created_at,
+            }
+        )
 
-    return Response({
-        "count": len(data),
-        "results": data,
-    })
+    return Response(
+        {
+            "count": len(data),
+            "results": data,
+        }
+    )
 
 
 @api_view(["GET", "PATCH"])
@@ -387,11 +498,9 @@ def admin_intern_submission(request, pk):
     used by the admin review modal.
     """
     try:
-        intern = (
-            InternProfile.objects
-            .select_related("user", "assigned_instructor__user")
-            .get(pk=pk)
-        )
+        intern = InternProfile.objects.select_related(
+            "user", "assigned_instructor__user"
+        ).get(pk=pk)
     except InternProfile.DoesNotExist:
         return Response(
             {"error": "Intern not found"},
@@ -432,57 +541,55 @@ def admin_intern_submission(request, pk):
         }
         for s in intern.schedules.select_related("slot").all()
     ]
-    return Response({
-        "id": str(intern.id),
-        "status": intern.status,
-        "created_at": intern.created_at,
-        "updated_at": intern.updated_at,
-
-        # User fields
-        "user": {
-            "id": str(user.id),
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "phone": user.phone,
-            "gender": user.gender,
-            "address": user.address,
-            "is_active": user.is_active,
-        },
-
-        # Placement / academic fields
-        "state_of_origin": intern.state_of_origin,
-        "preferred_campus": intern.preferred_campus,
-        "current_institution": intern.current_institution,
-        "institution_address": intern.institution_address,
-        "course_of_study": intern.course_of_study,
-        "current_level": intern.current_level,
-        "matric_number": intern.matric_number,
-        "internship_duration": intern.internship_duration,
-        "other_duration": intern.other_duration,
-        "school_start_date": intern.school_start_date,
-        "school_end_date": intern.school_end_date,
-
-        # Narrative
-        "why_intern": intern.why_intern,
-        "emergency_contact_type": intern.emergency_contact_type,
-        "emergency_phone": intern.emergency_phone,
-        "declaration": intern.declaration,
-
-        # Relations
-        "courses": courses,
-        "assigned_instructor": (
-            {
-                "id": str(intern.assigned_instructor.id),
-                "name": intern.assigned_instructor.user.get_full_name(),
-                "email": intern.assigned_instructor.user.email,
-            }
-            if intern.assigned_instructor
-            else None
-        ),
-        "documents": documents,
-        "schedules": schedules,
-    })
+    return Response(
+        {
+            "id": str(intern.id),
+            "status": intern.status,
+            "created_at": intern.created_at,
+            "updated_at": intern.updated_at,
+            # User fields
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "gender": user.gender,
+                "address": user.address,
+                "is_active": user.is_active,
+            },
+            # Placement / academic fields
+            "state_of_origin": intern.state_of_origin,
+            "preferred_campus": intern.preferred_campus,
+            "current_institution": intern.current_institution,
+            "institution_address": intern.institution_address,
+            "course_of_study": intern.course_of_study,
+            "current_level": intern.current_level,
+            "matric_number": intern.matric_number,
+            "internship_duration": intern.internship_duration,
+            "other_duration": intern.other_duration,
+            "school_start_date": intern.school_start_date,
+            "school_end_date": intern.school_end_date,
+            # Narrative
+            "why_intern": intern.why_intern,
+            "emergency_contact_type": intern.emergency_contact_type,
+            "emergency_phone": intern.emergency_phone,
+            "declaration": intern.declaration,
+            # Relations
+            "courses": courses,
+            "assigned_instructor": (
+                {
+                    "id": str(intern.assigned_instructor.user.id),
+                    "name": intern.assigned_instructor.user.get_full_name(),
+                    "email": intern.assigned_instructor.user.email,
+                }
+                if intern.assigned_instructor
+                else None
+            ),
+            "documents": documents,
+            "schedules": schedules,
+        }
+    )
 
 
 @api_view(["POST"])
@@ -527,15 +634,17 @@ def admin_accept_intern(request, pk):
             ),
         )
 
-    return Response({
-        "success": True,
-        "message": "Intern accepted.",
-        "intern": {
-            "id": str(intern.id),
-            "status": intern.status,
-            "user_id": str(user.id),
-        },
-    })
+    return Response(
+        {
+            "success": True,
+            "message": "Intern accepted.",
+            "intern": {
+                "id": str(intern.id),
+                "status": intern.status,
+                "user_id": str(user.id),
+            },
+        }
+    )
 
 
 @api_view(["POST"])
@@ -580,16 +689,18 @@ def admin_reject_intern(request, pk):
     except Exception as email_error:
         print(f"Rejection email failed: {email_error}")
 
-    return Response({
-        "success": True,
-        "message": "Intern rejected.",
-        "intern": {
-            "id": intern.id,
-            "status": intern.status,
-            "user_id": str(user.id),
-            "is_active": user.is_active,
-        },
-    })
+    return Response(
+        {
+            "success": True,
+            "message": "Intern rejected.",
+            "intern": {
+                "id": intern.id,
+                "status": intern.status,
+                "user_id": str(user.id),
+                "is_active": user.is_active,
+            },
+        }
+    )
 
 
 def _send_rejection_email(intern, reason):
@@ -650,11 +761,14 @@ def _edit_submission(request, intern):
         setattr(intern, field, data[field])
     intern.save(update_fields=changed)
 
-    return Response({
-        "success": True,
-        "message": "Submission updated.",
-        "updated_fields": changed,
-    })
+    return Response(
+        {
+            "success": True,
+            "message": "Submission updated.",
+            "updated_fields": changed,
+        }
+    )
+
 
 # ───────────────────────────────────────────────────────────────
 # ADMIN — CONFIGURE PLACEMENT
@@ -759,26 +873,199 @@ def admin_configure_intern(request, pk):
         for s in InternSchedule.objects.filter(intern=intern).select_related("slot")
     ]
 
-    return Response({
-        "success": True,
-        "message": "Placement configured.",
-        "intern": {
-            "id": str(intern.id),
-            "status": intern.status,
-            "school_start_date": intern.school_start_date,
-            "school_end_date": intern.school_end_date,
-            "assigned_instructor": (
+    return Response(
+        {
+            "success": True,
+            "message": "Placement configured.",
+            "intern": {
+                "id": str(intern.id),
+                "status": intern.status,
+                "school_start_date": intern.school_start_date,
+                "school_end_date": intern.school_end_date,
+                "assigned_instructor": (
+                    {
+                        "id": str(intern.assigned_instructor.user.id),
+                        "name": intern.assigned_instructor.user.get_full_name(),
+                        "email": intern.assigned_instructor.user.email,
+                    }
+                    if intern.assigned_instructor
+                    else None
+                ),
+                "schedules": schedules,
+            },
+        }
+    )
+
+
+def _document_context(intern):
+    """Builds the template context for generated intern documents."""
+    user = intern.user
+    gender = (user.gender or "").lower()
+    honorific, possessive, objective = {
+        "male": ("Mr.", "his", "him"),
+        "female": ("Ms.", "her", "her"),
+    }.get(gender, ("Mx.", "their", "them"))
+
+    def pretty(d):
+        return f"{d:%B} {d.day}, {d.year}" if d else "—"
+
+    duration = intern.internship_duration or ""
+    if duration == "other":
+        duration_text = intern.other_duration or "the agreed period"
+    elif duration:
+        duration_text = duration.replace("-", " ")
+    else:
+        duration_text = "the agreed period"
+
+    shift_lines = []
+    schedules = list(intern.schedules.select_related("slot"))
+    if schedules:
+        slot = schedules[0].slot
+        base = slot.get_shift_display()
+        shifts = (
+            ["Morning", "Afternoon", "Morning", "Afternoon"]
+            if schedules[0].is_rotating
+            else [base] * 4
+        )
+        day = slot.get_day_of_week_display()
+        shift_lines = [
+            {"week": i + 1, "day": day, "shift": shifts[i]} for i in range(4)
+        ]
+
+    # ── Logo Base64 Encoding ─────────────────────────────────────
+    logo_dir = Path(settings.BASE_DIR).parent / "frontend" / "public"
+    logo_path = logo_dir / "earlycode_logo.png"
+    if not logo_path.exists():
+        logo_path = logo_dir / "earlycode_logo.webp"
+    logo_data_uri = ""
+    if logo_path.exists():
+        with open(logo_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        ext = logo_path.suffix.lower().lstrip(".")
+        if ext == "jpg":
+            ext = "jpeg"
+        logo_data_uri = f"data:image/{ext};base64,{b64}"
+
+    # ── HR signature: accept ANY name/format (png/jpg only) ─────
+    signature_data_uri = ""
+    sig_files = [
+        p
+        for pattern in ("hr_signature*", "signature*")
+        for p in logo_dir.glob(pattern)
+        if p.suffix.lower() in (".png", ".jpg", ".jpeg")
+    ]
+    if sig_files:
+        sig_path = sig_files[0]
+        with open(sig_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        mime = "jpeg" if sig_path.suffix.lower() in (".jpg", ".jpeg") else "png"
+        signature_data_uri = f"data:image/{mime};base64,{b64}"
+        print(f"✍️  Signature embedded: {sig_path.name}")
+    else:
+        found = [p.name for p in logo_dir.glob("*signature*")]
+        print(f"️  No signature png/jpg in {logo_dir}. Found: {found}")
+        print("    (webp won't render in PDFs — convert it to PNG)")
+
+    # ── Local TTF folder for @font-face ─────────────────────────
+    fonts_dir_path = (
+        Path(settings.BASE_DIR) / "siwes" / "templates" / "siwes" / "docs" / "fonts"
+    )
+    fonts_dir = fonts_dir_path.as_posix() if fonts_dir_path.exists() else ""
+    if fonts_dir:
+        print(f"🔤 Fonts: {sorted(p.name for p in fonts_dir_path.glob('*.ttf'))}")
+    else:
+        print("⚠️  fonts folder missing → PDF falls back to Helvetica")
+
+    return {
+        "issued_date": pretty(timezone.now().date()),
+        "full_name": user.get_full_name(),
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "honorific": honorific,
+        "possessive": possessive,
+        "objective": objective,
+        "matric_number": intern.matric_number or "—",
+        "level": intern.current_level or "—",
+        "course_of_study": intern.course_of_study or "—",
+        "institution": intern.current_institution or "—",
+        "duration_text": duration_text,
+        "start_date": pretty(intern.school_start_date),
+        "end_date": pretty(intern.school_end_date),
+        "shift_lines": shift_lines,
+        "logo_data_uri": logo_data_uri,  # Inject the base64 string
+        "fonts_dir": fonts_dir,
+        "signature_data_uri": signature_data_uri,
+    }
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def generate_intern_documents(request, pk):
+    """
+    Renders the acceptance letter + code of conduct PDFs from the HTML
+    templates and stores them on the intern's document record.
+    Body: {"only_missing": true} (default) skips types that already
+    have a document — that's how manual uploads keep priority.
+    """
+    try:
+        intern = InternProfile.objects.select_related("user").get(pk=pk)
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    only_missing = bool(request.data.get("only_missing", True))
+    context = _document_context(intern)
+    results = []
+
+    for doc_type, template in (
+        (
+            InternDocument.Type.ACCEPTANCE_LETTER,
+            "siwes/docs/acceptance_letter.html",
+        ),
+        (
+            InternDocument.Type.CODE_OF_CONDUCT,
+            "siwes/docs/code_of_conduct.html",
+        ),
+    ):
+        existing = InternDocument.objects.filter(intern=intern, type=doc_type).first()
+        if existing and only_missing:
+            results.append(
                 {
-                    "id": str(intern.assigned_instructor.user.id),
-                    "name": intern.assigned_instructor.user.get_full_name(),
-                    "email": intern.assigned_instructor.user.email,
+                    "type": doc_type,
+                    "file_url": existing.file.url,
+                    "generated": False,
                 }
-                if intern.assigned_instructor
-                else None
-            ),
-            "schedules": schedules,
-        },
-    })
+            )
+            continue
+
+        html = render_to_string(template, context)
+        buffer = io.BytesIO()
+        pisa_status = pisa.CreatePDF(io.StringIO(html), dest=buffer)
+        if pisa_status.err:
+            return Response(
+                {"error": f"PDF generation failed for {doc_type}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if existing:
+            existing.delete()
+        filename = f"{intern.user.last_name}_{doc_type.lower()}.pdf"
+        doc = InternDocument.objects.create(
+            intern=intern,
+            type=doc_type,
+            file=ContentFile(buffer.getvalue(), name=filename),
+        )
+        results.append(
+            {
+                "type": doc_type,
+                "file_url": doc.file.url,
+                "generated": True,
+            }
+        )
+
+    return Response({"success": True, "documents": results})
 
 
 # ───────────────────────────────────────────────────────────────
@@ -831,7 +1118,7 @@ class AdminInstructorDetailView(generics.RetrieveUpdateAPIView):
             return self.get_queryset().get(user__id=self.kwargs["pk"])
         except InstructorProfile.DoesNotExist:
             raise NotFound("Instructor not found")
-        
+
     def patch(self, request, *args, **kwargs):
         instructor = self.get_object()
         serializer = InstructorUpdateSerializer(data=request.data)
@@ -863,10 +1150,12 @@ class AdminInstructorDetailView(generics.RetrieveUpdateAPIView):
                     fields.append("campus")
                 instructor.save(update_fields=fields)
 
-        return Response({
-            "success": True,
-            "instructor": AdminInstructorSerializer(instructor).data,
-        })
+        return Response(
+            {
+                "success": True,
+                "instructor": AdminInstructorSerializer(instructor).data,
+            }
+        )
 
 
 @api_view(["POST"])
@@ -914,6 +1203,7 @@ def admin_create_instructor(request):
         status=status.HTTP_201_CREATED,
     )
 
+
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_deactivate_instructor(request, pk):
@@ -922,9 +1212,7 @@ def admin_deactivate_instructor(request, pk):
     Interns keep their assignments. Instructor cannot log in.
     """
     try:
-        instructor = InstructorProfile.objects.select_related("user").get(
-            user__id=pk
-        )
+        instructor = InstructorProfile.objects.select_related("user").get(user__id=pk)
     except InstructorProfile.DoesNotExist:
         return Response(
             {"error": "Instructor not found"},
@@ -941,10 +1229,12 @@ def admin_deactivate_instructor(request, pk):
     user.is_active = False
     user.save(update_fields=["is_active"])
 
-    return Response({
-        "success": True,
-        "message": "Instructor deactivated.",
-    })
+    return Response(
+        {
+            "success": True,
+            "message": "Instructor deactivated.",
+        }
+    )
 
 
 @api_view(["POST"])
@@ -952,9 +1242,7 @@ def admin_deactivate_instructor(request, pk):
 def admin_reactivate_instructor(request, pk):
     """Restore a deactivated instructor."""
     try:
-        instructor = InstructorProfile.objects.select_related("user").get(
-            user__id=pk
-        )
+        instructor = InstructorProfile.objects.select_related("user").get(user__id=pk)
     except InstructorProfile.DoesNotExist:
         return Response(
             {"error": "Instructor not found"},
@@ -971,10 +1259,12 @@ def admin_reactivate_instructor(request, pk):
     user.is_active = True
     user.save(update_fields=["is_active"])
 
-    return Response({
-        "success": True,
-        "message": "Instructor reactivated.",
-    })
+    return Response(
+        {
+            "success": True,
+            "message": "Instructor reactivated.",
+        }
+    )
 
 
 @api_view(["POST"])
@@ -988,9 +1278,7 @@ def admin_remove_instructor(request, pk):
     - Keeps the InstructorProfile row for historical reference
     """
     try:
-        instructor = InstructorProfile.objects.select_related("user").get(
-            user__id=pk
-        )
+        instructor = InstructorProfile.objects.select_related("user").get(user__id=pk)
     except InstructorProfile.DoesNotExist:
         return Response(
             {"error": "Instructor not found"},
@@ -1061,12 +1349,13 @@ def _send_instructor_welcome_email(user):
         fail_silently=False,
     )
 
-    def _notify_admins(self, user, intern):
+
+def _notify_admins(user, intern):
         """One email to every active admin per new registration."""
         admin_emails = list(
-            User.objects.filter(
-                role=User.Role.ADMIN, is_active=True
-            ).values_list("email", flat=True)
+            User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list(
+                "email", flat=True
+            )
         )
         if not admin_emails:
             return
@@ -1092,6 +1381,26 @@ def _send_instructor_welcome_email(user):
             )
         except Exception as email_error:
             print(f"Admin notification email failed: {email_error}")
+
+
+def _notify_admins_in_app(user):
+        """Creates a NEW_REGISTRATION notification for every active admin."""
+        admin_ids = list(
+            User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list(
+                "id", flat=True
+            )
+        )
+        if not admin_ids:
+            return
+        name = user.get_full_name() or user.email
+        Notification.objects.bulk_create(
+            Notification(
+                user_id=admin_id,
+                type=Notification.Type.NEW_REGISTRATION,
+                message=f"New intern {name} has registered and is awaiting review.",
+            )
+            for admin_id in admin_ids
+        )
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
@@ -1378,47 +1687,125 @@ class AdminReportListView(generics.ListAPIView):
     permission_classes = [IsAdmin]
 
 
-@api_view(["POST"])
-@permission_classes([IsAdmin])
-def broadcast_message(request):
-    recipients = request.data.get("recipients", [])  # list of user IDs
-    content = request.data.get("content")
-
-    if not content:
-        return Response(
-            {"error": "Content is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    for user_id in recipients:
-        try:
-            user = User.objects.get(id=user_id)
-            Message.objects.create(sender=request.user, recipient=user, content=content)
-        except User.DoesNotExist:
-            pass
-
-    return Response({"success": True, "message": "Messages sent"})
-
-
 # ============================================================================
 # INSTRUCTOR VIEWS
 # ============================================================================
 
 
+class InstructorTaskListCreateView(generics.ListCreateAPIView):
+    serializer_class = InstructorTaskSerializer
+    permission_classes = [IsInstructor]
+
+    def get_queryset(self):
+        return Task.objects.filter(instructor=self.request.user.instructor_profile)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Creates a task and optionally attaches files uploaded in the
+        same request (multipart/form-data with `attachments` field).
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save(instructor=request.user.instructor_profile)
+
+        # Handle file attachments
+        attachments = request.FILES.getlist("attachments")
+        for file in attachments:
+            TaskAttachment.objects.create(task=task, file=file)
+
+        return Response(
+            self.get_serializer(task).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class InstructorTaskDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = InstructorTaskSerializer
+    permission_classes = [IsInstructor]
+
+    def get_queryset(self):
+        return Task.objects.filter(instructor=self.request.user.instructor_profile)
+
+
 @api_view(["GET"])
 @permission_classes([IsInstructor])
 def instructor_dashboard(request):
+    """
+    Overview payload: stats, assigned interns, reports awaiting
+    review, and the most recently reviewed reports.
+    """
     instructor = request.user.instructor_profile
-    my_interns = InternProfile.objects.filter(assigned_instructor=instructor)
-    my_tasks = Task.objects.filter(instructor=instructor)
-    pending_reports = Report.objects.filter(
-        intern__assigned_instructor=instructor, status="SUBMITTED"
-    )
+    interns = InternProfile.objects.filter(
+        assigned_instructor=instructor
+    ).select_related("user")
+    reports = Report.objects.filter(intern__assigned_instructor=instructor)
+    pending = reports.filter(status=Report.Status.SUBMITTED).order_by("-submitted_at")
+    reviewed = reports.filter(
+        status__in=[
+            Report.Status.REVIEWED,
+            Report.Status.APPROVED,
+            Report.Status.NEEDS_REVISION,
+        ]
+    ).order_by("-reviewed_at", "-submitted_at")
+    unread_conversations = Conversation.objects.filter(
+        Q(initiator=request.user) | Q(recipient=request.user),
+    ).filter(
+        Exists(
+            Message.objects.filter(
+                conversation=OuterRef("pk"),
+                is_read=False,
+            ).exclude(sender=request.user)
+        )
+    ).count()
 
     return Response(
         {
-            "total_interns": my_interns.count(),
-            "total_tasks": my_tasks.count(),
-            "pending_reports": pending_reports.count(),
+            "stats": {
+                "total_interns": interns.count(),
+                "active_interns": interns.filter(
+                    status=InternProfile.Status.ACTIVE
+                ).count(),
+                "pending_reports": pending.count(),
+                "reviewed_reports": reviewed.count(),
+                "unread_conversations": unread_conversations,
+            },
+            "interns": [
+                {
+                    "id": i.pk,
+                    "name": i.user.get_full_name(),
+                    "email": i.user.email,
+                    "campus": i.preferred_campus,
+                    "status": i.status,
+                    "school_start_date": i.school_start_date,
+                    "school_end_date": i.school_end_date,
+                }
+                for i in interns
+            ],
+            "pending_reports": [
+                {
+                    "id": str(r.id),
+                    "title": r.title,
+                    "intern": {
+                        "id": r.intern.pk,
+                        "name": r.intern.user.get_full_name(),
+                    },
+                    "submitted_at": r.submitted_at,
+                }
+                for r in pending[:5]
+            ],
+            "recently_reviewed": [
+                {
+                    "id": str(r.id),
+                    "title": r.title,
+                    "status": r.status,
+                    "intern": {
+                        "id": r.intern.pk,
+                        "name": r.intern.user.get_full_name(),
+                    },
+                    "reviewed_at": r.reviewed_at,
+                }
+                for r in reviewed[:5]
+            ],
         }
     )
 
@@ -1426,29 +1813,259 @@ def instructor_dashboard(request):
 @api_view(["GET"])
 @permission_classes([IsInstructor])
 def my_interns(request):
+    """Lightweight list of the instructor's assigned interns."""
     instructor = request.user.instructor_profile
-    interns = InternProfile.objects.filter(assigned_instructor=instructor)
-    serializer = InternProfileSerializer(interns, many=True)
-    return Response(serializer.data)
+    interns = (
+        InternProfile.objects.filter(assigned_instructor=instructor)
+        .select_related("user")
+        .order_by("user__first_name", "user__last_name")
+    )
+    data = []
+    for i in interns:
+        reports = Report.objects.filter(intern=i)
+        data.append(
+            {
+                "id": i.pk,
+                "user": {
+                    "id": str(i.user.id),
+                    "first_name": i.user.first_name,
+                    "last_name": i.user.last_name,
+                    "email": i.user.email,
+                    "phone": i.user.phone,
+                },
+                "preferred_campus": i.preferred_campus,
+                "status": i.status,
+                "school_start_date": i.school_start_date,
+                "school_end_date": i.school_end_date,
+                "course_of_study": i.course_of_study,
+                "current_institution": i.current_institution,
+                "reports_total": reports.count(),
+                "reports_pending": reports.filter(
+                    status=Report.Status.SUBMITTED
+                ).count(),
+            }
+        )
+    return Response({"count": len(data), "results": data})
 
 
-class InstructorTaskListCreateView(generics.ListCreateAPIView):
-    serializer_class = TaskSerializer
-    permission_classes = [IsInstructor]
+@api_view(["GET"])
+@permission_classes([IsInstructor])
+def instructor_intern_detail(request, pk):
+    """
+    One intern (scoped to this instructor) with read-only schedule
+    and recent reports.
+    """
+    try:
+        intern = InternProfile.objects.select_related("user").get(
+            pk=pk,
+            assigned_instructor=request.user.instructor_profile,
+        )
+    except InternProfile.DoesNotExist:
+        return Response(
+            {"error": "Intern not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
-    def get_queryset(self):
-        return Task.objects.filter(instructor=self.request.user.instructor_profile)
+    schedules = [
+        {
+            "id": str(s.id),
+            "day_of_week": s.slot.day_of_week,
+            "shift": s.slot.shift,
+            "start_time": s.slot.start_time.strftime("%H:%M"),
+            "end_time": s.slot.end_time.strftime("%H:%M"),
+            "is_rotating": s.is_rotating,
+        }
+        for s in intern.schedules.select_related("slot").all()
+    ]
+    reports = [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "status": r.status,
+            "submitted_at": r.submitted_at,
+            "instructor_feedback": r.instructor_feedback,
+        }
+        for r in intern.reports.order_by("-submitted_at")[:10]
+    ]
 
-    def perform_create(self, serializer):
-        serializer.save(instructor=self.request.user.instructor_profile)
+    return Response(
+        {
+            "id": intern.pk,
+            "user": {
+                "id": str(intern.user.id),
+                "first_name": intern.user.first_name,
+                "last_name": intern.user.last_name,
+                "email": intern.user.email,
+                "phone": intern.user.phone,
+            },
+            "preferred_campus": intern.preferred_campus,
+            "status": intern.status,
+            "school_start_date": intern.school_start_date,
+            "school_end_date": intern.school_end_date,
+            "course_of_study": intern.course_of_study,
+            "current_institution": intern.current_institution,
+            "current_level": intern.current_level,
+            "matric_number": intern.matric_number,
+            "schedules": schedules,
+            "reports": reports,
+        }
+    )
 
 
-class InstructorTaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = TaskSerializer
-    permission_classes = [IsInstructor]
+@api_view(["GET"])
+@permission_classes([IsInstructor])
+def instructor_reports(request):
+    """
+    Reports from assigned interns. Optional ?status= filter
+    (e.g. ?status=submitted).
+    """
+    instructor = request.user.instructor_profile
+    qs = (
+        Report.objects.filter(intern__assigned_instructor=instructor)
+        .exclude(status=Report.Status.DRAFT)
+        .select_related("intern__user")
+        .order_by("-submitted_at")
+    )
+    status_filter = request.query_params.get("status")
+    if status_filter:
+        qs = qs.filter(status=status_filter.strip().upper())
 
-    def get_queryset(self):
-        return Task.objects.filter(instructor=self.request.user.instructor_profile)
+    data = [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "content": r.content,
+            "status": r.status,
+            "submitted_at": r.submitted_at,
+            "reviewed_at": r.reviewed_at,
+            "instructor_feedback": r.instructor_feedback,
+            "intern": {
+                "id": r.intern.pk,
+                "name": r.intern.user.get_full_name(),
+                "email": r.intern.user.email,
+            },
+        }
+        for r in qs
+    ]
+    return Response({"count": len(data), "results": data})
+
+
+@api_view(["PATCH"])
+@permission_classes([IsInstructor])
+def review_report(request, pk):
+    """
+    Approve or request revision on a report. Feedback is required
+    (min 10 chars). Notifies the intern.
+    """
+    try:
+        report = Report.objects.select_related("intern__user").get(
+            pk=pk,
+            intern__assigned_instructor=request.user.instructor_profile,
+        )
+    except Report.DoesNotExist:
+        return Response(
+            {"error": "Report not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if report.status == Report.Status.DRAFT:
+        return Response(
+            {"error": "This report is still a draft."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if report.status == Report.Status.APPROVED:
+        return Response(
+            {"error": "This report has already been approved."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    new_status = request.data.get("status")
+    if new_status not in (
+        Report.Status.APPROVED,
+        Report.Status.NEEDS_REVISION,
+    ):
+        return Response(
+            {"error": "status must be APPROVED or NEEDS_REVISION."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    feedback = (request.data.get("feedback") or "").strip()
+    if len(feedback) < 10:
+        return Response(
+            {"error": "Feedback of at least 10 characters is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    report.status = new_status
+    report.instructor_feedback = feedback
+    report.reviewed_at = timezone.now()
+    report.save(update_fields=["status", "instructor_feedback", "reviewed_at"])
+
+    Notification.objects.create(
+        user=report.intern.user,
+        type=Notification.Type.REPORT_REVIEWED,
+        message=(
+            f"Your report “{report.title}” was "
+            + (
+                "approved."
+                if new_status == Report.Status.APPROVED
+                else "sent back for revision."
+            )
+        ),
+    )
+
+    return Response(
+        {
+            "success": True,
+            "message": "Report reviewed.",
+            "report": {
+                "id": str(report.id),
+                "status": report.status,
+                "instructor_feedback": report.instructor_feedback,
+                "reviewed_at": report.reviewed_at,
+            },
+        }
+    )
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsInstructor])
+def instructor_profile(request):
+    """
+    The instructor's own profile. GET returns it; PATCH allows
+    editing phone and department only. Email and name are locked.
+    """
+    instructor = request.user.instructor_profile
+    user = request.user
+
+    if request.method == "PATCH":
+        user_fields = []
+        if "phone" in request.data:
+            user.phone = (request.data.get("phone") or "").strip()
+            user_fields.append("phone")
+        if user_fields:
+            user.save(update_fields=user_fields)
+        if "department" in request.data:
+            instructor.department = (request.data.get("department") or "").strip()
+            instructor.save(update_fields=["department"])
+
+    return Response(
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "department": instructor.department,
+            "campus": instructor.campus,
+            "assigned_intern_count": instructor.assigned_intern_count,
+            "profile_picture": (
+                request.user.profile_picture.url
+                if getattr(request.user, "profile_picture", None)
+                else None
+            ),
+        }
+    )
 
 
 @api_view(["POST"])
@@ -1503,32 +2120,105 @@ def assign_task_to_interns(request, pk):
     )
 
 
-@api_view(["GET"])
+@api_view(["POST"])
 @permission_classes([IsInstructor])
-def instructor_reports(request):
-    instructor = request.user.instructor_profile
-    reports = Report.objects.filter(intern__assigned_instructor=instructor)
-    serializer = ReportSerializer(reports, many=True)
-    return Response(serializer.data)
+def upload_task_attachments(request, pk):
+    """
+    Upload one or more files to an existing task. Instructor-only,
+    scoped to own tasks.
+    """
+    try:
+        task = Task.objects.get(
+            pk=pk,
+            instructor=request.user.instructor_profile,
+        )
+    except Task.DoesNotExist:
+        return Response(
+            {"error": "Task not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    attachments = request.FILES.getlist("attachments")
+    if not attachments:
+        return Response(
+            {"error": "No files provided"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    created = []
+    for file in attachments:
+        attachment = TaskAttachment.objects.create(task=task, file=file)
+        created.append(
+            {
+                "id": str(attachment.id),
+                "file_url": attachment.file.url,
+                "uploaded_at": attachment.uploaded_at,
+            }
+        )
+
+    return Response(
+        {
+            "success": True,
+            "message": f"{len(created)} file(s) uploaded.",
+            "attachments": created,
+        }
+    )
 
 
 @api_view(["PATCH"])
 @permission_classes([IsInstructor])
-def review_report(request, pk):
+def review_task_assignment(request, pk):
+    """
+    Mark a submitted task assignment as REVIEWED with feedback.
+    Scoped to the instructor's own tasks. Notifies the intern.
+    """
     try:
-        report = Report.objects.get(
-            pk=pk, intern__assigned_instructor=request.user.instructor_profile
+        assignment = TaskAssignment.objects.select_related(
+            "task__instructor__user", "intern__user"
+        ).get(
+            pk=pk,
+            task__instructor=request.user.instructor_profile,
         )
-    except Report.DoesNotExist:
-        return Response({"error": "Report not found"}, status=status.HTTP_404_NOT_FOUND)
+    except TaskAssignment.DoesNotExist:
+        return Response(
+            {"error": "Task assignment not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
-    report.status = request.data.get("status", report.status)
-    report.instructor_feedback = request.data.get(
-        "instructor_feedback", report.instructor_feedback
+    if assignment.status != TaskAssignment.Status.SUBMITTED:
+        return Response(
+            {"error": "Only submitted tasks can be reviewed."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    feedback = (request.data.get("feedback") or "").strip()
+    if len(feedback) < 10:
+        return Response(
+            {"error": "Feedback of at least 10 characters is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    assignment.status = TaskAssignment.Status.REVIEWED
+    assignment.instructor_feedback = feedback
+    assignment.save(update_fields=["status", "instructor_feedback"])
+
+    Notification.objects.create(
+        user=assignment.intern.user,
+        type=Notification.Type.TASK_REVIEWED,
+        message=f"Your task “{assignment.task.title}” was reviewed.",
     )
-    report.save()
 
-    return Response({"success": True, "message": "Report reviewed"})
+    return Response(
+        {
+            "success": True,
+            "message": "Task reviewed.",
+            "assignment": {
+                "id": str(assignment.id),
+                "status": assignment.status,
+                "instructor_feedback": assignment.instructor_feedback,
+            },
+        }
+    )
 
 
 # ============================================================================
@@ -1585,7 +2275,21 @@ def intern_dashboard(request):
         + task_qs.filter(status=TaskAssignment.Status.REVIEWED).count()
     )
 
-    unread_messages = Message.objects.filter(recipient=user, is_read=False).count()
+    unread_messages = Message.objects.filter(
+        Q(conversation__initiator=user) | Q(conversation__recipient=user),
+        is_read=False,
+    ).exclude(sender=user).count()
+    
+    unread_conversations = Conversation.objects.filter(
+        Q(initiator=request.user) | Q(recipient=request.user),
+    ).filter(
+        Exists(
+            Message.objects.filter(
+                conversation=OuterRef("pk"),
+                is_read=False,
+            ).exclude(sender=request.user)
+        )
+    ).count()
 
     unread_notifications = Notification.objects.filter(user=user, is_read=False).count()
 
@@ -1668,6 +2372,7 @@ def intern_dashboard(request):
                 "tasks_pending": tasks_pending,
                 "tasks_completed": tasks_completed,
                 "unread_messages": unread_messages,
+                "unread_conversations": unread_conversations,
                 "unread_notifications": unread_notifications,
             },
             "recent_reports": RecentReportSerializer(recent_reports, many=True).data,
@@ -1675,6 +2380,43 @@ def intern_dashboard(request):
                 "has_schedule": attendance_has_schedule,
                 "upcoming_days": upcoming_days,
             },
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsIntern])
+def intern_own_profile(request):
+    """Read-only view of the intern's own record (managed by admin)."""
+    user = request.user
+    intern = request.user.intern_profile
+    instructor = intern.assigned_instructor
+    return Response(
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "gender": getattr(user, "gender", "") or "",
+            "profile_picture": (
+                user.profile_picture.url
+                if getattr(user, "profile_picture", None)
+                else None
+            ),
+            "state_of_origin": intern.state_of_origin,
+            "institution": intern.current_institution,
+            "course": intern.course_of_study,
+            "level": intern.current_level,
+            "matric_number": intern.matric_number,
+            "start_date": intern.school_start_date,
+            "end_date": intern.school_end_date,
+            "duration": (
+                intern.other_duration
+                if intern.internship_duration == "other"
+                else intern.internship_duration
+            ),
+            "instructor_name": (instructor.user.get_full_name() if instructor else ""),
         }
     )
 
@@ -1706,7 +2448,7 @@ def my_documents(request):
 @permission_classes([IsIntern])
 def my_schedule(request):
     intern = request.user.intern_profile
-    schedules = intern.schedule.all()
+    schedules = intern.schedules.all()
     serializer = InternScheduleSerializer(schedules, many=True)
     return Response(serializer.data)
 
@@ -1723,24 +2465,54 @@ def my_tasks(request):
 @api_view(["PATCH"])
 @permission_classes([IsIntern])
 def submit_task(request, pk):
+    """
+    Marks a task assignment as SUBMITTED. Optionally accepts a
+    submission file (multipart/form-data with `submission_file` field).
+    """
     try:
-        assignment = TaskAssignment.objects.get(
-            pk=pk, intern=request.user.intern_profile
-        )
+        assignment = TaskAssignment.objects.select_related(
+            "intern__user", "task__instructor__user"
+        ).get(pk=pk, intern=request.user.intern_profile)
     except TaskAssignment.DoesNotExist:
-        return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Task assignment not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
-    assignment.status = "SUBMITTED"
+    # Handle optional submission file
+    submission_file = request.FILES.get("submission_file")
+    if submission_file:
+        assignment.submission_file = submission_file
+
+    assignment.status = TaskAssignment.Status.SUBMITTED
     assignment.submitted_at = timezone.now()
-    assignment.save()
+    update_fields = ["status", "submitted_at"]
+    if submission_file:
+        update_fields.append("submission_file")
+    assignment.save(update_fields=update_fields)
 
     Notification.objects.create(
         user=assignment.task.instructor.user,
-        type="TASK_ASSIGNED",
+        type=Notification.Type.TASK_SUBMITTED,
         message=f"{request.user.get_full_name()} submitted task: {assignment.task.title}",
     )
 
-    return Response({"success": True, "message": "Task submitted"})
+    return Response(
+        {
+            "success": True,
+            "message": "Task submitted.",
+            "assignment": {
+                "id": str(assignment.id),
+                "status": assignment.status,
+                "submitted_at": assignment.submitted_at,
+                "submission_file_url": (
+                    assignment.submission_file.url
+                    if assignment.submission_file
+                    else None
+                ),
+            },
+        }
+    )
 
 
 class InternReportListCreateView(generics.ListCreateAPIView):
@@ -1831,41 +2603,230 @@ class CourseListView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
 
-class MessageListCreateView(generics.ListCreateAPIView):
-    serializer_class = MessageSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# ─────────────────────────────────────────────────────────────
+# MESSAGES — strict 1-to-1 chat
+# Rules: intern -> own instructor + admins
+#        instructor -> own interns + admins
+#        admin -> anyone
+# ─────────────────────────────────────────────────────────────
 
-    def get_queryset(self):
-        return Message.objects.filter(recipient=self.request.user)
 
-    def perform_create(self, serializer):
-        sender = self.request.user
-        recipient_id = self.request.data.get("recipient_id")
+def _messageable_users(user: User) -> models.QuerySet:
+    """Queryset of users this role is allowed to thread with."""
+    if user.role == "ADMIN":
+        return User.objects.exclude(pk=user.pk)
+        
+    if user.role == "INSTRUCTOR":
+        intern_ids = User.objects.filter(
+            intern_profile__assigned_instructor=user.instructor_profile
+        ).values_list("pk", flat=True)
+        return User.objects.filter(
+            models.Q(pk__in=intern_ids) | models.Q(role="ADMIN")
+        ).exclude(pk=user.pk).distinct()
+        
+    # INTERN
+    q = models.Q(role="ADMIN")
+    intern = getattr(user, "intern_profile", None)
+    if intern and getattr(intern, "assigned_instructor_id", None):
+        q |= models.Q(pk=intern.assigned_instructor.user_id)
+        
+    return User.objects.filter(q).exclude(pk=user.pk).distinct()
 
+
+def _get_own_conversation(user: User, pk: Any) -> Optional[Conversation]:
+    return (
+        Conversation.objects.filter(Q(pk=pk), Q(initiator=user) | Q(recipient=user))
+        .select_related("initiator", "recipient")
+        .first()
+    )
+
+
+def _send_chat_message(conv, sender, body):
+    msg = Message.objects.create(conversation=conv, sender=sender, body=body)
+    conv.save(update_fields=["updated_at"])  # bump thread to top of list
+    Notification.objects.create(
+        user=conv.other(sender),
+        type=Notification.Type.MESSAGE_RECEIVED,
+        message=f"{sender.get_full_name() or sender.email} sent you a message",
+    )
+    return msg
+
+
+def _conversation_payload(conv, user, last=None, unread=None):
+    other = conv.other(user)
+    if last is None:
+        last = conv.messages.order_by("-created_at").first()
+    if unread is None:
+        unread = conv.messages.filter(sender=other, is_read=False).count()
+    return {
+        "id": str(conv.id),
+        "other_user": {
+            "id": str(other.id),
+            "first_name": other.first_name,
+            "last_name": other.last_name,
+            "role": other.role,
+            "profile_picture": (
+                other.profile_picture.url
+                if getattr(other, "profile_picture", None)
+                else None
+            ),
+        },
+        "last_message": (
+            {
+                "body": last.body,
+                "sender_id": str(last.sender_id),
+                "created_at": last.created_at,
+            }
+            if last
+            else None
+        ),
+        "unread_count": unread,
+        "updated_at": conv.updated_at,
+    }
+
+
+@api_view(["GET", "POST"])
+@permission_classes([permissions.IsAuthenticated])
+def conversations(request):
+    """GET = my threads (newest first). POST = get-or-create a thread
+    with recipient_id, optionally sending initial_message."""
+    if request.method == "POST":
+        recipient_id = request.data.get("recipient_id")
         try:
-            recipient = User.objects.get(id=recipient_id)
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Recipient not found")
-
-        # Enforce messaging rules
-        if sender.role == "INTERN":
-            intern = sender.intern_profile
-            allowed_recipients = [
-                (
-                    intern.assigned_instructor.user.id
-                    if intern.assigned_instructor
-                    else None
-                )
-            ]
-            # Also allow admin
-            admin_ids = list(
-                User.objects.filter(role="ADMIN").values_list("id", flat=True)
+            recipient = User.objects.get(pk=recipient_id)
+        except (User.DoesNotExist, Exception):
+            return Response(
+                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
-            allowed_recipients.extend(admin_ids)
+        if not _messageable_users(request.user).filter(pk=recipient.pk).exists():
+            return Response(
+                {"error": "You cannot message this user"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        conv = Conversation.objects.filter(
+            Q(initiator=request.user, recipient=recipient)
+            | Q(initiator=recipient, recipient=request.user)
+        ).first()
+        if conv is None:
+            conv = Conversation.objects.create(
+                initiator=request.user, recipient=recipient
+            )
+        body = (request.data.get("initial_message") or "").strip()
+        if body:
+            _send_chat_message(conv, request.user, body[:2000])
+        return Response(
+            _conversation_payload(conv, request.user),
+            status=status.HTTP_201_CREATED,
+        )
 
-            if recipient.id not in allowed_recipients:
-                raise serializers.ValidationError(
-                    "You can only message your instructor or admin"
-                )
+    convs = list(
+        Conversation.objects.filter(
+            Q(initiator=request.user) | Q(recipient=request.user)
+        )
+        .select_related("initiator", "recipient")
+        .order_by("-updated_at")
+    )
+    ids = [c.pk for c in convs]
 
-        serializer.save(sender=sender, recipient=recipient)
+    # One query for newest message per thread (no N+1)
+    last_by_conv = {}
+    for m in Message.objects.filter(conversation_id__in=ids).order_by("-created_at"):
+        last_by_conv.setdefault(m.conversation_id, m)
+
+    # One query for unread counts per thread
+    unread_map = {
+        row["conversation_id"]: row["n"]
+        for row in Message.objects.filter(conversation_id__in=ids, is_read=False)
+        .exclude(sender=request.user)
+        .values("conversation_id")
+        .annotate(n=Count("id"))
+    }
+
+    return Response(
+        [
+            _conversation_payload(
+                c,
+                request.user,
+                last=last_by_conv.get(c.pk),
+                unread=unread_map.get(c.pk, 0),
+            )
+            for c in convs
+        ]
+    )
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def conversation_thread(request, pk):
+    """Full thread, oldest first. Opening it marks incoming messages read."""
+    conv = _get_own_conversation(request.user, pk)
+    if conv is None:
+        return Response(
+            {"error": "Conversation not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    other = conv.other(request.user)
+    conv.messages.filter(sender=other, is_read=False).update(is_read=True)
+    messages = [
+        {
+            "id": str(m.id),
+            "sender_id": str(m.sender_id),
+            "body": m.body,
+            "is_read": m.is_read,
+            "created_at": m.created_at,
+        }
+        for m in conv.messages.all()
+    ]
+    return Response({**_conversation_payload(conv, request.user), "messages": messages})
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def send_message(request, pk):
+    conv = _get_own_conversation(request.user, pk)
+    if conv is None:
+        return Response(
+            {"error": "Conversation not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    body = (request.data.get("body") or "").strip()
+    if not body:
+        return Response(
+            {"error": "Message body is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    if len(body) > 2000:
+        return Response(
+            {"error": "Message too long (max 2000 characters)"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    msg = _send_chat_message(conv, request.user, body)
+    return Response(
+        {
+            "id": str(msg.id),
+            "sender_id": str(msg.sender_id),
+            "body": msg.body,
+            "is_read": msg.is_read,
+            "created_at": msg.created_at,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def messageable_users(request: Request) -> Response:
+    """Returns the list of users the current user is allowed to message."""
+    users = _messageable_users(request.user)
+    data = [
+        {
+            "id": str(u.id),
+            "first_name": u.first_name,
+            "last_name": u.last_name,
+            "role": u.role,
+            "profile_picture": (
+                u.profile_picture.url
+                if getattr(u, "profile_picture", None)
+                else None
+            ),
+        }
+        for u in users
+    ]
+    return Response(data)

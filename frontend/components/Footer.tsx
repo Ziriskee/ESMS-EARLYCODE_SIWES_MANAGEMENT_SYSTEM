@@ -3,7 +3,13 @@ export default function Footer() {
     <footer className="w-full px-6 py-10 border-t border-white/10">
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
-          <img src="/earlycode_logo.webp" alt="" className="w-10 h-auto"/>
+          <img
+            src="/earlycode_logo.webp"
+            alt=""
+            width={40}
+            height={40}
+            className="w-10 h-auto"
+          />
           <span className="text-lg font-semibold font-heading">
             Early Code Institute
           </span>
@@ -19,6 +25,7 @@ export default function Footer() {
             href="https://wa.me/2347087777367"
             target="_blank"
             rel="noopener noreferrer"
+            aria-label="Chat with us on WhatsApp"
             className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-ec-gold hover:text-ec-dark transition-all duration-300"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -27,6 +34,7 @@ export default function Footer() {
           </a>
           <a
             href="mailto:info@earlycode.net"
+            aria-label="Email us at info@earlycode.net"
             className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-ec-gold hover:text-ec-dark transition-all duration-300"
           >
             <svg

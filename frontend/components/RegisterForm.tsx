@@ -292,12 +292,14 @@ export default function RegisterForm() {
       {/* Header */}
       <div className="w-full px-4 sm:px-6 py-4 sm:py-5 border-b border-white/10 bg-ec-dark/90">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <a href="/" className="flex items-center gap-3">
-            <img
-              src="/earlycode_logo.webp"
-              alt="earlycode logo"
-              className="h-auto w-10"
-            ></img>
+          <a href="/" className="flex items-center gap-3" aria-label="homepage">
+           <img
+src="/earlycode_logo.webp"
+alt="earlycode logo"
+width={40}
+height={40}
+className="h-auto w-10"
+></img>
             <span className="text-xl font-semibold tracking-tight font-heading">
               Early Code
             </span>

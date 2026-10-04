@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../../../lib/api";
-import type { NotificationType } from "../components/notificationMeta";
+import type { NotificationType } from "../components/notifications/notificationMeta";
 
 export type Notification = {
   id: string;
@@ -10,7 +10,7 @@ export type Notification = {
   created_at: string;
 };
 
-type UseNotificationsResult = {
+export type UseNotificationsResult = {
   notifications: Notification[];
   loading: boolean;
   error: string | null;
@@ -25,7 +25,6 @@ export function useNotifications(): UseNotificationsResult {
 
   useEffect(() => {
     let isMounted = true;
-
     const fetchData = async () => {
       try {
         const result = await apiFetch<
@@ -43,9 +42,7 @@ export function useNotifications(): UseNotificationsResult {
         if (isMounted) setLoading(false);
       }
     };
-
     fetchData();
-
     return () => {
       isMounted = false;
     };
@@ -56,7 +53,6 @@ export function useNotifications(): UseNotificationsResult {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
     );
-
     try {
       await apiFetch(`/notifications/${id}/read/`, { method: "PATCH" });
     } catch {
@@ -68,15 +64,18 @@ export function useNotifications(): UseNotificationsResult {
   }, []);
 
   const markAllAsRead = useCallback(async () => {
-    const previous = notifications;
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-
-    try {
-      await apiFetch("/notifications/mark-all-read/", { method: "POST" });
-    } catch {
-      setNotifications(previous);
-    }
-  }, [notifications]);
+    setNotifications((prev) => {
+      const previous = prev;
+      const next = prev.map((n) => ({ ...n, is_read: true }));
+      // Fire and revert on failure
+      apiFetch("/notifications/mark-all-read/", { method: "POST" }).catch(
+        () => {
+          setNotifications(previous);
+        },
+      );
+      return next;
+    });
+  }, []);
 
   return { notifications, loading, error, markAsRead, markAllAsRead };
 }
