@@ -36,7 +36,6 @@ const InstructorMessagesPage = lazy(
 );
 const AdminMessagesPage = lazy(() => import("./dashboard/admin/messages/page"));
 const InternOverviewPage = lazy(() => import("./dashboard/intern/page"));
-const InternReportsPage = lazy(() => import("./dashboard/intern/reports/page"));
 const InternTasksPage = lazy(() => import("./dashboard/intern/tasks/page"));
 const InternNotificationsPage = lazy(
   () => import("./dashboard/intern/notifications/page"),
@@ -57,9 +56,6 @@ const InstructorOverviewPage = lazy(
 );
 const InstructorInternsPage = lazy(
   () => import("./dashboard/instructor/interns/page"),
-);
-const InstructorReportsPage = lazy(
-  () => import("./dashboard/instructor/reports/page"),
 );
 const InstructorTasksPage = lazy(
   () => import("./dashboard/instructor/tasks/page"),
@@ -92,21 +88,7 @@ function NotFoundPage() {
   );
 }
 
-function AdminReportsPlaceholder() {
-  return (
-    <div
-      className="rounded-[14px] border p-8"
-      style={{
-        borderColor: "var(--line)",
-        backgroundColor: "var(--surface)",
-      }}
-    >
-      <p className="text-[14px]" style={{ color: "var(--muted)" }}>
-        Admin Reports — coming later.
-      </p>
-    </div>
-  );
-}
+
 
 
 export function App() {
@@ -138,7 +120,6 @@ export function App() {
             }
           >
             <Route index element={<InternOverviewPage />} />
-            <Route path="reports" element={<InternReportsPage />} />
             <Route path="tasks" element={<InternTasksPage />} />
             <Route path="messages" element={<InternMessagesPage />} />
             <Route path="notifications" element={<InternNotificationsPage />} />
@@ -158,7 +139,6 @@ export function App() {
             <Route path="pending" element={<AdminPendingPage />} />
             <Route path="interns" element={<AdminAllInternsPage />} />
             <Route path="instructors" element={<AdminInstructorsPage />} />
-            <Route path="reports" element={<AdminReportsPlaceholder />} />
             <Route path="messages" element={<AdminMessagesPage />} />
             <Route path="profile" element={<AdminProfilePage />} />
             <Route path="notifications" element={<AdminNotificationsPage />} />
@@ -175,7 +155,6 @@ export function App() {
           >
             <Route index element={<InstructorOverviewPage />} />
             <Route path="interns" element={<InstructorInternsPage />} />
-            <Route path="reports" element={<InstructorReportsPage />} />
             <Route path="messages" element={<InstructorMessagesPage />} />
             <Route path="tasks" element={<InstructorTasksPage />} />
             <Route

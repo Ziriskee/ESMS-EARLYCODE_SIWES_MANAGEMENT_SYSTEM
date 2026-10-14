@@ -39,6 +39,8 @@ function statusChip(status: InternTaskAssignment["status"]) {
       return { tone: "approved" as const, label: "Reviewed" };
     case "SUBMITTED":
       return { tone: "review" as const, label: "Submitted" };
+    case "NEEDS_REVISION":
+      return { tone: "action" as const, label: "Needs revision" };
     case "PENDING":
     default:
       return { tone: "neutral" as const, label: "Pending" };
@@ -59,7 +61,8 @@ export function TaskDetailModal({
 
   const chip = statusChip(assignment.status);
   const overdue = isOverdue(assignment);
-  const canSubmit = assignment.status === "PENDING";
+    const canSubmit =
+      assignment.status === "PENDING" || assignment.status === "NEEDS_REVISION";
   const attachments = assignment.task.attachments ?? [];
 
   const handleSubmit = async () => {
@@ -226,22 +229,34 @@ export function TaskDetailModal({
           </Section>
         ) : null}
 
-        {/* Instructor feedback (after review) */}
-        {assignment.status === "REVIEWED" && assignment.instructor_feedback && (
-          <Section label="Instructor feedback">
-            <div
-              className="rounded-[10px] p-4"
-              style={{ backgroundColor: "var(--status-approved-bg)" }}
-            >
-              <p
-                className="text-[13.5px] whitespace-pre-wrap leading-relaxed"
-                style={{ color: "var(--status-approved-text)" }}
+        {/* Instructor feedback (after review or revision request) */}
+        {(assignment.status === "REVIEWED" ||
+          assignment.status === "NEEDS_REVISION") &&
+          assignment.instructor_feedback && (
+            <Section label="Instructor feedback">
+              <div
+                className="rounded-[10px] p-4"
+                style={{
+                  backgroundColor:
+                    assignment.status === "NEEDS_REVISION"
+                      ? "var(--status-action-bg)"
+                      : "var(--status-approved-bg)",
+                }}
               >
-                {assignment.instructor_feedback}
-              </p>
-            </div>
-          </Section>
-        )}
+                <p
+                  className="text-[13.5px] whitespace-pre-wrap leading-relaxed"
+                  style={{
+                    color:
+                      assignment.status === "NEEDS_REVISION"
+                        ? "var(--status-action-text)"
+                        : "var(--status-approved-text)",
+                  }}
+                >
+                  {assignment.instructor_feedback}
+                </p>
+              </div>
+            </Section>
+          )}
 
         {error && (
           <p

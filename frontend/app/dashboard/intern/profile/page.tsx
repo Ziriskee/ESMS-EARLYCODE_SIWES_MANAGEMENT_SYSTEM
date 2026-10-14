@@ -24,6 +24,14 @@ type InternOwnProfile = {
   instructor_name: string;
 };
 
+type InternDocument = {
+  id: string;
+  type: string;
+  type_display: string;
+  file_url: string | null;
+  uploaded_at: string;
+};
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -39,6 +47,7 @@ function formatDate(iso: string | null): string {
 
 export default function InternProfilePage() {
   const [profile, setProfile] = useState<InternOwnProfile | null>(null);
+  const [documents, setDocuments] = useState<InternDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +55,13 @@ export default function InternProfilePage() {
     let isMounted = true;
     const run = async () => {
       try {
-        const data = await apiFetch<InternOwnProfile>("/intern/profile/");
-        if (isMounted) setProfile(data);
+        const [profileData, docsData] = await Promise.all([
+          apiFetch<InternOwnProfile>("/intern/profile/"),
+          apiFetch<{ results: InternDocument[] }>("/intern/documents/"),
+        ]);
+        if (!isMounted) return;
+        setProfile(profileData);
+        setDocuments(docsData.results ?? []);
       } catch (err) {
         if (isMounted) {
           setError(
@@ -73,7 +87,6 @@ export default function InternProfilePage() {
       </Card>
     );
   }
-
   if (error || !profile) {
     return (
       <Card padding="lg">
@@ -84,7 +97,6 @@ export default function InternProfilePage() {
       </Card>
     );
   }
-
   return (
     <div className="max-w-3xl space-y-4 sm:space-y-5">
       <ProfileHeaderCard
@@ -95,7 +107,6 @@ export default function InternProfilePage() {
         roleLabel="Intern"
         locationLine={profile.institution}
       />
-
       <ProfileSection
         title="Personal information"
         fields={[
@@ -111,7 +122,6 @@ export default function InternProfilePage() {
           },
         ]}
       />
-
       <ProfileSection
         title="Academic details"
         fields={[
@@ -125,7 +135,6 @@ export default function InternProfilePage() {
           },
         ]}
       />
-
       <ProfileSection
         title="Placement"
         fields={[
@@ -147,7 +156,59 @@ export default function InternProfilePage() {
           },
         ]}
       />
-
+      <Card padding="lg">
+        <h3
+          className="text-[16px] sm:text-[17px] font-semibold leading-tight mb-4"
+          style={{ color: "var(--text)", fontFamily: "var(--font-display)" }}
+        >
+          My documents
+        </h3>
+        {documents.length === 0 ? (
+          <p className="text-[13px]" style={{ color: "var(--muted)" }}>
+            No documents yet. Your acceptance letter and code of conduct appear
+            here once they are generated.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {documents.map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p
+                    className="text-[13.5px] font-semibold truncate"
+                    style={{ color: "var(--text)" }}
+                  >
+                    {d.type_display}
+                  </p>
+                  <p
+                    className="text-[11.5px] mt-0.5"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    {formatDate(d.uploaded_at)}
+                  </p>
+                </div>
+                {d.file_url && (
+                  <a
+                    href={d.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-4 rounded-full text-[12.5px] font-semibold shrink-0 inline-flex items-center"
+                    style={{
+                      backgroundColor: "var(--surface2)",
+                      color: "var(--text)",
+                      border: "1px solid var(--line)",
+                    }}
+                  >
+                    Download
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
       <p className="text-[11.5px]" style={{ color: "var(--muted)" }}>
         Your details are managed by the admin. Contact them if anything needs
         correcting.

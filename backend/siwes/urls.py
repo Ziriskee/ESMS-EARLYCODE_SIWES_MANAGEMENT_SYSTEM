@@ -105,7 +105,6 @@ urlpatterns = [
         views.AdminScheduleListCreateView.as_view(),
         name="admin-schedules",
     ),
-    path("admin/reports/", views.AdminReportListView.as_view(), name="admin-reports"),
     
     # Instructor
     path(
@@ -147,8 +146,6 @@ urlpatterns = [
         views.review_task_assignment,
         name="review-task-assignment",
     ),
-    path("instructor/reports/", views.instructor_reports, name="instructor-reports"),
-    path("instructor/reports/<uuid:pk>/", views.review_report, name="review-report"),
     # Intern
     path("intern/dashboard/", views.intern_dashboard, name="intern-dashboard"),
     path("intern/profile/", views.intern_own_profile, name="intern-own-profile"),
@@ -156,16 +153,7 @@ urlpatterns = [
     path("intern/schedule/", views.my_schedule, name="my-schedule"),
     path("intern/tasks/", views.my_tasks, name="my-tasks"),
     path("intern/tasks/<int:pk>/submit/", views.submit_task, name="submit-task"),
-    path(
-        "intern/reports/",
-        views.InternReportListCreateView.as_view(),
-        name="intern-reports",
-    ),
-    path(
-        "intern/reports/<uuid:pk>/",
-        views.InternReportDetailView.as_view(),
-        name="intern-report-detail",
-    ),
+ 
     # Shared
     path("notifications/", views.NotificationListView.as_view(), name="notifications"),
     path(

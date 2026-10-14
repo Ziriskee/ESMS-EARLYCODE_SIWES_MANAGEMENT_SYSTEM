@@ -43,11 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const login = useCallback((u: AuthUser) => {
+    setUser(u);
+  }, []);
+
   const logout = useCallback(async () => {
+    setLoading(true);
     try {
-      await apiFetch("/auth/logout/", {
-        method: "POST",
-      });
+      await apiFetch("/auth/logout/", { method: "POST" });
+    } catch {
+      /* cookie already gone or backend down — still redirect */
     } finally {
       setUser(null);
       window.location.href = "/login";
@@ -55,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refreshUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, refreshUser, logout, login }}>
       {children}
     </AuthContext.Provider>
   );

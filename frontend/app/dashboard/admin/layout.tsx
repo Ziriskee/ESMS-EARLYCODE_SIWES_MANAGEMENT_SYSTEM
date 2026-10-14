@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
-  FileText,
   GraduationCap,
   LayoutGrid,
   MessageSquare,
@@ -21,7 +20,6 @@ const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
   "/dashboard/admin/pending": { title: "Pending Interns" },
   "/dashboard/admin/interns": { title: "All Interns" },
   "/dashboard/admin/instructors": { title: "Instructors" },
-  "/dashboard/admin/reports": { title: "Reports" },
   "/dashboard/admin/messages": { title: "Messages" },
   "/dashboard/admin/notifications": { title: "Notifications" },
   "/dashboard/admin/profile": { title: "My Profile" },
@@ -57,7 +55,6 @@ function AdminShell() {
             label: "Instructors",
             icon: GraduationCap,
           },
-          { to: "/dashboard/admin/reports", label: "Reports", icon: FileText },
           {
             to: "/dashboard/admin/messages",
             label: "Messages",

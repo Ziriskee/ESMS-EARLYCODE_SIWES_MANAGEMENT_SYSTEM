@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../../../lib/api";
 
-export type InternTaskStatus = "PENDING" | "SUBMITTED" | "REVIEWED";
+export type InternTaskStatus =
+  | "PENDING"
+  | "SUBMITTED"
+  | "REVIEWED"
+  | "NEEDS_REVISION";
 
 export type InternTaskAttachment = {
   id: string;

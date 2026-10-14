@@ -1,8 +1,8 @@
-import { Clock, FileText, ListChecks, MessageSquare } from "lucide-react";
+import { CheckCircle, Clock, ListChecks, MessageSquare } from "lucide-react";
 import { StatCard } from "./StatCard";
 
 type StatsRowProps = {
-  reportsSubmitted: number;
+  tasksCompleted: number;
   tasksPending: number;
   unreadMessages: number;
   daysRemaining: number | null;
@@ -13,22 +13,21 @@ function pad2(n: number): string {
 }
 
 export function StatsRow({
-  reportsSubmitted,
+  tasksCompleted,
   tasksPending,
   unreadMessages,
   daysRemaining,
 }: StatsRowProps) {
   const daysValue =
     typeof daysRemaining === "number" ? pad2(daysRemaining) : "—";
-
   return (
     <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
         tone={1}
-        icon={FileText}
-        label="Reports submitted"
-        value={pad2(reportsSubmitted)}
-        sub="All time"
+        icon={CheckCircle}
+        label="Tasks completed"
+        value={pad2(tasksCompleted)}
+        sub="Submitted or reviewed"
       />
       <StatCard
         tone={2}

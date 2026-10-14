@@ -108,7 +108,7 @@ export default function AdminProfilePage() {
             { label: "Email", value: profile.email, locked: true },
             { label: "Phone", value: profile.phone },
           ]}
-          onEdit={() => setEditOpen(true)}
+          // onEdit={() => setEditOpen(true)}
         />
 
         <ProfileSection

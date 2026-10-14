@@ -2,7 +2,7 @@ import { User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Modal } from "../../shared/ui/Modal";
 import { StatusChip } from "../../shared/data/StatusChip";
-import type { AssignedInternDetail, InternReportEntry } from "../types";
+import type { AssignedInternDetail } from "../types";
 
 type InternDetailModalProps = {
   open: boolean;
@@ -52,21 +52,6 @@ function statusChip(status: AssignedInternDetail["status"]) {
   }
 }
 
-function reportChip(status: InternReportEntry["status"]) {
-  switch (status) {
-    case "APPROVED":
-      return { tone: "approved" as const, label: "Approved" };
-    case "NEEDS_REVISION":
-      return { tone: "action" as const, label: "Needs revision" };
-    case "SUBMITTED":
-      return { tone: "review" as const, label: "Submitted" };
-    case "REVIEWED":
-      return { tone: "neutral" as const, label: "Reviewed" };
-    case "DRAFT":
-    default:
-      return { tone: "neutral" as const, label: "Draft" };
-  }
-}
 
 export function InternDetailModal({
   open,
@@ -201,41 +186,6 @@ export function InternDetailModal({
             )}
           </Section>
 
-          <Section label="Reports">
-            {detail.reports.length === 0 ? (
-              <p className="text-[13px]" style={{ color: "var(--muted)" }}>
-                No reports yet.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {detail.reports.map((r) => {
-                  const chip = reportChip(r.status);
-                  return (
-                    <li
-                      key={r.id}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p
-                          className="truncate text-[13.5px] font-semibold"
-                          style={{ color: "var(--text)" }}
-                        >
-                          {r.title}
-                        </p>
-                        <p
-                          className="text-[11.5px] mt-0.5"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          {formatDate(r.submitted_at)}
-                        </p>
-                      </div>
-                      <StatusChip tone={chip.tone} label={chip.label} />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Section>
         </div>
       )}
     </Modal>

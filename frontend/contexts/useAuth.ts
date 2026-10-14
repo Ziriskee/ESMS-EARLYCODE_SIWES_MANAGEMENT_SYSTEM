@@ -1,14 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { useContext } from "react";
+import { AuthContext, type AuthUser } from "./AuthContext";
 
-export type User = {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  role: "ADMIN" | "INSTRUCTOR" | "INTERN";
-  [key: string]: unknown;
-};
+export type User = AuthUser;
 
 type UseAuthResult = {
   user: User | null;
@@ -18,52 +11,21 @@ type UseAuthResult = {
   refetch: () => Promise<void>;
 };
 
+/**
+ * Read-only bridge onto AuthContext. One store for the whole app:
+ * logout, 401s and refetches all mutate the same state every
+ * component renders from.
+ */
 export function useAuth(): UseAuthResult {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch current user on mount
-  const refetch = useCallback(async () => {
-    try {
-      const me = await apiFetch<User>("/auth/me/");
-      setUser(me);
-    } catch {
-      setUser(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const me = await apiFetch<User>("/auth/me/");
-        if (isMounted) setUser(me);
-      } catch {
-        if (isMounted) setUser(null);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    })();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const login = useCallback((u: User) => {
-    setUser(u);
-  }, []);
-
-const logout = useCallback(async () => {
-  setLoading(true);
-  try {
-    await apiFetch("/auth/logout/", { method: "POST" });
-  } catch {
-    /* ignore */
-  } finally {
-    setUser(null);
-    setLoading(false);
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth must be used inside AuthProvider");
   }
-}, []);
-
-  return { user, loading, login, logout, refetch };
+  return {
+    user: ctx.user,
+    loading: ctx.loading,
+    login: ctx.login,
+    logout: ctx.logout,
+    refetch: ctx.refreshUser,
+  };
 }

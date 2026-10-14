@@ -30,6 +30,8 @@ function assignmentChip(status: TaskAssignmentEntry["status"]) {
       return { tone: "approved" as const, label: "Reviewed" };
     case "SUBMITTED":
       return { tone: "review" as const, label: "Submitted" };
+    case "NEEDS_REVISION":
+      return { tone: "action" as const, label: "Needs revision" };
     case "PENDING":
     default:
       return { tone: "neutral" as const, label: "Pending" };
@@ -232,14 +234,16 @@ export function TaskDetailModal({
                         View submitted file
                       </a>
                     )}
-                    {a.status === "REVIEWED" && a.instructor_feedback && (
-                      <p
-                        className="text-[12.5px] mt-3 whitespace-pre-wrap"
-                        style={{ color: "var(--muted)" }}
-                      >
-                        "{a.instructor_feedback}"
-                      </p>
-                    )}
+                    {(a.status === "REVIEWED" ||
+                      a.status === "NEEDS_REVISION") &&
+                      a.instructor_feedback && (
+                        <p
+                          className="text-[12.5px] mt-3 whitespace-pre-wrap"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          "{a.instructor_feedback}"
+                        </p>
+                      )}
                   </li>
                 );
               })}

@@ -2,15 +2,14 @@ import { useState } from "react";
 import { WelcomeCard } from "./components/WelcomeCard";
 import { ProgressCard } from "./components/ProgressCard";
 import { StatsRow } from "./components/StatsRow";
-import { RecentReportsCard } from "./components/RecentReportsCard";
 import { ScheduleModal } from "./components/ScheduleModal";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { Card } from "../shared/ui/Card";
 import { useDashboardDataContext } from "@/contexts/useDashboardDataContext";
-import { useNavigate } from "react-router-dom";
+// import { useNavigate } from "react-router-dom";
 
 export default function InternOverviewPage() {
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const { data, loading, error } = useDashboardDataContext();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -35,7 +34,7 @@ export default function InternOverviewPage() {
     );
   }
 
-  const { user, placement, stats, recent_reports, attendance } = data;
+  const { user, placement, stats,  attendance } = data;
 
   return (
     <div className="space-y-8 pt-2">
@@ -55,17 +54,10 @@ export default function InternOverviewPage() {
       />
 
       <StatsRow
-        reportsSubmitted={stats.reports_submitted}
+        tasksCompleted={stats.tasks_completed}
         tasksPending={stats.tasks_pending}
         unreadMessages={stats.unread_messages}
         daysRemaining={placement?.days_remaining ?? null}
-      />
-
-      <RecentReportsCard
-        reports={recent_reports}
-        onOpenReport={(id) => {
-          navigate(`/dashboard/intern/reports`, { state: { openId: id } });
-        }}
       />
 
       <ScheduleModal

@@ -19,7 +19,7 @@ from xhtml2pdf import pisa
 from django.core.mail import EmailMultiAlternatives
 import base64
 from pathlib import Path
-from django.db.models import Q, Count, QuerySet,Exists,OuterRef
+from django.db.models import Q, Count, Exists, OuterRef
 from typing import Any, Optional
 from rest_framework.request import Request
 from .throttles import MagicLinkThrottle, RegisterThrottle
@@ -37,7 +37,6 @@ from .models import (
     InternSchedule,
     Task,
     TaskAssignment,
-    Report,
     Message,
     Notification,
 )
@@ -50,7 +49,6 @@ from .serializers import (
     InternDocumentSerializer,
     InternDocumentUploadSerializer,
     PlacementConfigSerializer,
-    RecentReportSerializer,
     SubmissionEditSerializer,
     UserSerializer,
     InstructorProfileSerializer,
@@ -58,7 +56,6 @@ from .serializers import (
     CourseSerializer,
     InternScheduleSerializer,
     TaskAssignmentSerializer,
-    ReportSerializer,
     NotificationSerializer,
     InternRegisterSerializer,
 )
@@ -75,6 +72,7 @@ signer = TimestampSigner()
 
 class InternRegisterView(generics.CreateAPIView):
     """Register a new intern. No password required — magic link login."""
+
     throttle_classes = [RegisterThrottle]
     queryset = User.objects.all()
     serializer_class = InternRegisterSerializer
@@ -379,18 +377,27 @@ def admin_dashboard(request):
     total_instructors = InstructorProfile.objects.count()
     pending_interns = InternProfile.objects.filter(status="PENDING").count()
     active_interns = InternProfile.objects.filter(status="ACTIVE").count()
-    total_reports = Report.objects.count()
-    unread_reports = Report.objects.filter(status="SUBMITTED").count()
-    unread_conversations = Conversation.objects.filter(
-        Q(initiator=request.user) | Q(recipient=request.user),
-    ).filter(
-        Exists(
-            Message.objects.filter(
-                conversation=OuterRef("pk"),
-                is_read=False,
-            ).exclude(sender=request.user)
+    missing_documents = (
+        InternProfile.objects.filter(status=InternProfile.Status.ACTIVE)
+        .annotate(doc_count=Count("documents"))
+        .filter(doc_count__lt=2)
+        .count()
+    )
+
+    unread_conversations = (
+        Conversation.objects.filter(
+            Q(initiator=request.user) | Q(recipient=request.user),
         )
-    ).count()
+        .filter(
+            Exists(
+                Message.objects.filter(
+                    conversation=OuterRef("pk"),
+                    is_read=False,
+                ).exclude(sender=request.user)
+            )
+        )
+        .count()
+    )
 
     return Response(
         {
@@ -398,8 +405,7 @@ def admin_dashboard(request):
             "total_instructors": total_instructors,
             "pending_interns": pending_interns,
             "active_interns": active_interns,
-            "total_reports": total_reports,
-            "unread_reports": unread_reports,
+            "missing_documents": missing_documents,
             "unread_conversations": unread_conversations,
         }
     )
@@ -1016,9 +1022,15 @@ def generate_intern_documents(request, pk):
         )
 
     only_missing = bool(request.data.get("only_missing", True))
+    allowed = {
+        InternDocument.Type.ACCEPTANCE_LETTER,
+        InternDocument.Type.CODE_OF_CONDUCT,
+    }
+    requested = request.data.get("types") or []
+    types = [t for t in requested if t in allowed] or list(allowed)
     context = _document_context(intern)
     results = []
-
+    created_types = []
     for doc_type, template in (
         (
             InternDocument.Type.ACCEPTANCE_LETTER,
@@ -1029,15 +1041,18 @@ def generate_intern_documents(request, pk):
             "siwes/docs/code_of_conduct.html",
         ),
     ):
+        if doc_type not in types:
+            continue
         existing = InternDocument.objects.filter(intern=intern, type=doc_type).first()
         if existing and only_missing:
             results.append(
                 {
                     "type": doc_type,
-                    "file_url": existing.file.url,
-                    "generated": False,
+                    "file_url": doc.file.url,
+                    "generated": True,
                 }
             )
+            created_types.append(doc_type)
             continue
 
         html = render_to_string(template, context)
@@ -1065,7 +1080,12 @@ def generate_intern_documents(request, pk):
             }
         )
 
-    return Response({"success": True, "documents": results})
+        if created_types:
+            try:
+                _send_documents_email(intern, created_types)
+            except Exception as email_error:
+                print(f"Documents email failed: {email_error}")
+        return Response({"success": True, "documents": results})
 
 
 # ───────────────────────────────────────────────────────────────
@@ -1351,56 +1371,57 @@ def _send_instructor_welcome_email(user):
 
 
 def _notify_admins(user, intern):
-        """One email to every active admin per new registration."""
-        admin_emails = list(
-            User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list(
-                "email", flat=True
-            )
+    """One email to every active admin per new registration."""
+    admin_emails = list(
+        User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list(
+            "email", flat=True
         )
-        if not admin_emails:
-            return
-        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
-        review_url = f"{frontend_url}/dashboard/admin/pending"
-        subject = "New SIWES registration — review pending"
-        message = (
-            "A new intern has registered and is awaiting review.\n\n"
-            f"Name: {user.get_full_name() or '—'}\n"
-            f"Email: {user.email}\n"
-            f"Campus: {intern.preferred_campus or '—'}\n\n"
-            f"Review here: {review_url}\n"
-            "— EarlyCode SIWES"
+    )
+    if not admin_emails:
+        return
+    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+    review_url = f"{frontend_url}/dashboard/admin/pending"
+    subject = "New SIWES registration — review pending"
+    message = (
+        "A new intern has registered and is awaiting review.\n\n"
+        f"Name: {user.get_full_name() or '—'}\n"
+        f"Email: {user.email}\n"
+        f"Campus: {intern.preferred_campus or '—'}\n\n"
+        f"Review here: {review_url}\n"
+        "— EarlyCode SIWES"
+    )
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=admin_emails,
+            fail_silently=False,
         )
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
-        try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=from_email,
-                recipient_list=admin_emails,
-                fail_silently=False,
-            )
-        except Exception as email_error:
-            print(f"Admin notification email failed: {email_error}")
+    except Exception as email_error:
+        print(f"Admin notification email failed: {email_error}")
 
 
 def _notify_admins_in_app(user):
-        """Creates a NEW_REGISTRATION notification for every active admin."""
-        admin_ids = list(
-            User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list(
-                "id", flat=True
-            )
+    """Creates a NEW_REGISTRATION notification for every active admin."""
+    admin_ids = list(
+        User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list(
+            "id", flat=True
         )
-        if not admin_ids:
-            return
-        name = user.get_full_name() or user.email
-        Notification.objects.bulk_create(
-            Notification(
-                user_id=admin_id,
-                type=Notification.Type.NEW_REGISTRATION,
-                message=f"New intern {name} has registered and is awaiting review.",
-            )
-            for admin_id in admin_ids
+    )
+    if not admin_ids:
+        return
+    name = user.get_full_name() or user.email
+    Notification.objects.bulk_create(
+        Notification(
+            user_id=admin_id,
+            type=Notification.Type.NEW_REGISTRATION,
+            message=f"New intern {name} has registered and is awaiting review.",
         )
+        for admin_id in admin_ids
+    )
+
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
@@ -1681,12 +1702,6 @@ class AdminScheduleListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAdmin]
 
 
-class AdminReportListView(generics.ListAPIView):
-    queryset = Report.objects.all()
-    serializer_class = ReportSerializer
-    permission_classes = [IsAdmin]
-
-
 # ============================================================================
 # INSTRUCTOR VIEWS
 # ============================================================================
@@ -1731,32 +1746,41 @@ class InstructorTaskDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsInstructor])
 def instructor_dashboard(request):
     """
-    Overview payload: stats, assigned interns, reports awaiting
-    review, and the most recently reviewed reports.
+    Overview payload: stats, assigned interns  awaiting
+    review, and the most recently reviewed  .
     """
     instructor = request.user.instructor_profile
     interns = InternProfile.objects.filter(
         assigned_instructor=instructor
     ).select_related("user")
-    reports = Report.objects.filter(intern__assigned_instructor=instructor)
-    pending = reports.filter(status=Report.Status.SUBMITTED).order_by("-submitted_at")
-    reviewed = reports.filter(
-        status__in=[
-            Report.Status.REVIEWED,
-            Report.Status.APPROVED,
-            Report.Status.NEEDS_REVISION,
-        ]
-    ).order_by("-reviewed_at", "-submitted_at")
-    unread_conversations = Conversation.objects.filter(
-        Q(initiator=request.user) | Q(recipient=request.user),
-    ).filter(
-        Exists(
-            Message.objects.filter(
-                conversation=OuterRef("pk"),
-                is_read=False,
-            ).exclude(sender=request.user)
-        )
+    tasks_awaiting_review = TaskAssignment.objects.filter(
+        status=TaskAssignment.Status.SUBMITTED,
+        task__instructor=instructor,
     ).count()
+    unread_messages = (
+        Message.objects.filter(
+            Q(conversation__initiator=request.user)
+            | Q(conversation__recipient=request.user),
+            is_read=False,
+        )
+        .exclude(sender=request.user)
+        .count()
+    )
+
+    unread_conversations = (
+        Conversation.objects.filter(
+            Q(initiator=request.user) | Q(recipient=request.user),
+        )
+        .filter(
+            Exists(
+                Message.objects.filter(
+                    conversation=OuterRef("pk"),
+                    is_read=False,
+                ).exclude(sender=request.user)
+            )
+        )
+        .count()
+    )
 
     return Response(
         {
@@ -1765,8 +1789,8 @@ def instructor_dashboard(request):
                 "active_interns": interns.filter(
                     status=InternProfile.Status.ACTIVE
                 ).count(),
-                "pending_reports": pending.count(),
-                "reviewed_reports": reviewed.count(),
+                "tasks_awaiting_review": tasks_awaiting_review,
+                "unread_messages": unread_messages,
                 "unread_conversations": unread_conversations,
             },
             "interns": [
@@ -1780,31 +1804,6 @@ def instructor_dashboard(request):
                     "school_end_date": i.school_end_date,
                 }
                 for i in interns
-            ],
-            "pending_reports": [
-                {
-                    "id": str(r.id),
-                    "title": r.title,
-                    "intern": {
-                        "id": r.intern.pk,
-                        "name": r.intern.user.get_full_name(),
-                    },
-                    "submitted_at": r.submitted_at,
-                }
-                for r in pending[:5]
-            ],
-            "recently_reviewed": [
-                {
-                    "id": str(r.id),
-                    "title": r.title,
-                    "status": r.status,
-                    "intern": {
-                        "id": r.intern.pk,
-                        "name": r.intern.user.get_full_name(),
-                    },
-                    "reviewed_at": r.reviewed_at,
-                }
-                for r in reviewed[:5]
             ],
         }
     )
@@ -1822,7 +1821,7 @@ def my_interns(request):
     )
     data = []
     for i in interns:
-        reports = Report.objects.filter(intern=i)
+
         data.append(
             {
                 "id": i.pk,
@@ -1839,10 +1838,6 @@ def my_interns(request):
                 "school_end_date": i.school_end_date,
                 "course_of_study": i.course_of_study,
                 "current_institution": i.current_institution,
-                "reports_total": reports.count(),
-                "reports_pending": reports.filter(
-                    status=Report.Status.SUBMITTED
-                ).count(),
             }
         )
     return Response({"count": len(data), "results": data})
@@ -1853,7 +1848,7 @@ def my_interns(request):
 def instructor_intern_detail(request, pk):
     """
     One intern (scoped to this instructor) with read-only schedule
-    and recent reports.
+     .
     """
     try:
         intern = InternProfile.objects.select_related("user").get(
@@ -1877,16 +1872,6 @@ def instructor_intern_detail(request, pk):
         }
         for s in intern.schedules.select_related("slot").all()
     ]
-    reports = [
-        {
-            "id": str(r.id),
-            "title": r.title,
-            "status": r.status,
-            "submitted_at": r.submitted_at,
-            "instructor_feedback": r.instructor_feedback,
-        }
-        for r in intern.reports.order_by("-submitted_at")[:10]
-    ]
 
     return Response(
         {
@@ -1907,123 +1892,6 @@ def instructor_intern_detail(request, pk):
             "current_level": intern.current_level,
             "matric_number": intern.matric_number,
             "schedules": schedules,
-            "reports": reports,
-        }
-    )
-
-
-@api_view(["GET"])
-@permission_classes([IsInstructor])
-def instructor_reports(request):
-    """
-    Reports from assigned interns. Optional ?status= filter
-    (e.g. ?status=submitted).
-    """
-    instructor = request.user.instructor_profile
-    qs = (
-        Report.objects.filter(intern__assigned_instructor=instructor)
-        .exclude(status=Report.Status.DRAFT)
-        .select_related("intern__user")
-        .order_by("-submitted_at")
-    )
-    status_filter = request.query_params.get("status")
-    if status_filter:
-        qs = qs.filter(status=status_filter.strip().upper())
-
-    data = [
-        {
-            "id": str(r.id),
-            "title": r.title,
-            "content": r.content,
-            "status": r.status,
-            "submitted_at": r.submitted_at,
-            "reviewed_at": r.reviewed_at,
-            "instructor_feedback": r.instructor_feedback,
-            "intern": {
-                "id": r.intern.pk,
-                "name": r.intern.user.get_full_name(),
-                "email": r.intern.user.email,
-            },
-        }
-        for r in qs
-    ]
-    return Response({"count": len(data), "results": data})
-
-
-@api_view(["PATCH"])
-@permission_classes([IsInstructor])
-def review_report(request, pk):
-    """
-    Approve or request revision on a report. Feedback is required
-    (min 10 chars). Notifies the intern.
-    """
-    try:
-        report = Report.objects.select_related("intern__user").get(
-            pk=pk,
-            intern__assigned_instructor=request.user.instructor_profile,
-        )
-    except Report.DoesNotExist:
-        return Response(
-            {"error": "Report not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    if report.status == Report.Status.DRAFT:
-        return Response(
-            {"error": "This report is still a draft."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if report.status == Report.Status.APPROVED:
-        return Response(
-            {"error": "This report has already been approved."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    new_status = request.data.get("status")
-    if new_status not in (
-        Report.Status.APPROVED,
-        Report.Status.NEEDS_REVISION,
-    ):
-        return Response(
-            {"error": "status must be APPROVED or NEEDS_REVISION."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    feedback = (request.data.get("feedback") or "").strip()
-    if len(feedback) < 10:
-        return Response(
-            {"error": "Feedback of at least 10 characters is required."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    report.status = new_status
-    report.instructor_feedback = feedback
-    report.reviewed_at = timezone.now()
-    report.save(update_fields=["status", "instructor_feedback", "reviewed_at"])
-
-    Notification.objects.create(
-        user=report.intern.user,
-        type=Notification.Type.REPORT_REVIEWED,
-        message=(
-            f"Your report “{report.title}” was "
-            + (
-                "approved."
-                if new_status == Report.Status.APPROVED
-                else "sent back for revision."
-            )
-        ),
-    )
-
-    return Response(
-        {
-            "success": True,
-            "message": "Report reviewed.",
-            "report": {
-                "id": str(report.id),
-                "status": report.status,
-                "instructor_feedback": report.instructor_feedback,
-                "reviewed_at": report.reviewed_at,
-            },
         }
     )
 
@@ -2198,14 +2066,29 @@ def review_task_assignment(request, pk):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    assignment.status = TaskAssignment.Status.REVIEWED
+    new_status = request.data.get("status", TaskAssignment.Status.REVIEWED)
+    if new_status not in (
+        TaskAssignment.Status.REVIEWED,
+        TaskAssignment.Status.NEEDS_REVISION,
+    ):
+        return Response(
+            {"error": "status must be REVIEWED or NEEDS_REVISION."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    assignment.status = new_status
     assignment.instructor_feedback = feedback
     assignment.save(update_fields=["status", "instructor_feedback"])
-
     Notification.objects.create(
         user=assignment.intern.user,
         type=Notification.Type.TASK_REVIEWED,
-        message=f"Your task “{assignment.task.title}” was reviewed.",
+        message=(
+            f"Your task “{assignment.task.title}” was "
+            + (
+                "reviewed."
+                if new_status == TaskAssignment.Status.REVIEWED
+                else "sent back for revision."
+            )
+        ),
     )
 
     return Response(
@@ -2231,7 +2114,7 @@ def review_task_assignment(request, pk):
 def intern_dashboard(request):
     """
     Returns everything the intern Overview page needs in one call:
-    user info, placement progress, stats, recent reports, and
+    user info, placement progress, stats and
     upcoming on-site days.
     """
     user = request.user
@@ -2264,40 +2147,43 @@ def intern_dashboard(request):
             "percent_complete": percent_complete,
         }
 
-    # ---------- Stats ----------
-    reports_qs = Report.objects.filter(intern=intern)
-    reports_submitted = reports_qs.count()
-
     task_qs = TaskAssignment.objects.filter(intern=intern)
-    tasks_pending = task_qs.filter(status=TaskAssignment.Status.PENDING).count()
+    tasks_pending = task_qs.filter(
+        status__in=[
+            TaskAssignment.Status.PENDING,
+            TaskAssignment.Status.NEEDS_REVISION,
+        ]
+    ).count()
     tasks_completed = (
         task_qs.filter(status=TaskAssignment.Status.SUBMITTED).count()
         + task_qs.filter(status=TaskAssignment.Status.REVIEWED).count()
     )
 
-    unread_messages = Message.objects.filter(
-        Q(conversation__initiator=user) | Q(conversation__recipient=user),
-        is_read=False,
-    ).exclude(sender=user).count()
-    
-    unread_conversations = Conversation.objects.filter(
-        Q(initiator=request.user) | Q(recipient=request.user),
-    ).filter(
-        Exists(
-            Message.objects.filter(
-                conversation=OuterRef("pk"),
-                is_read=False,
-            ).exclude(sender=request.user)
+    unread_messages = (
+        Message.objects.filter(
+            Q(conversation__initiator=user) | Q(conversation__recipient=user),
+            is_read=False,
         )
-    ).count()
+        .exclude(sender=user)
+        .count()
+    )
+
+    unread_conversations = (
+        Conversation.objects.filter(
+            Q(initiator=request.user) | Q(recipient=request.user),
+        )
+        .filter(
+            Exists(
+                Message.objects.filter(
+                    conversation=OuterRef("pk"),
+                    is_read=False,
+                ).exclude(sender=request.user)
+            )
+        )
+        .count()
+    )
 
     unread_notifications = Notification.objects.filter(user=user, is_read=False).count()
-
-    # ---------- Recent reports (up to 4) ----------
-    # Drafts are excluded — "Recent reports" shows only submitted/reviewed work.
-    recent_reports = reports_qs.exclude(status=Report.Status.DRAFT).order_by(
-        "-submitted_at"
-    )[:4]
 
     # ---------- Upcoming on-site days (next 35 days) ----------
     attendance_has_schedule = False
@@ -2368,14 +2254,12 @@ def intern_dashboard(request):
             },
             "placement": placement,
             "stats": {
-                "reports_submitted": reports_submitted,
                 "tasks_pending": tasks_pending,
                 "tasks_completed": tasks_completed,
                 "unread_messages": unread_messages,
                 "unread_conversations": unread_conversations,
                 "unread_notifications": unread_notifications,
             },
-            "recent_reports": RecentReportSerializer(recent_reports, many=True).data,
             "attendance": {
                 "has_schedule": attendance_has_schedule,
                 "upcoming_days": upcoming_days,
@@ -2478,6 +2362,14 @@ def submit_task(request, pk):
             {"error": "Task assignment not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
+    if assignment.status not in (
+        TaskAssignment.Status.PENDING,
+        TaskAssignment.Status.NEEDS_REVISION,
+    ):
+        return Response(
+            {"error": "This task was already submitted and can no longer be changed."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Handle optional submission file
     submission_file = request.FILES.get("submission_file")
@@ -2513,42 +2405,6 @@ def submit_task(request, pk):
             },
         }
     )
-
-
-class InternReportListCreateView(generics.ListCreateAPIView):
-    serializer_class = ReportSerializer
-    permission_classes = [IsIntern]
-
-    def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.intern_profile).order_by(
-            "-submitted_at"
-        )
-
-    def perform_create(self, serializer):
-        report = serializer.save(intern=self.request.user.intern_profile)
-
-        # Only notify the instructor when the report is actually submitted,
-        # not when it is saved as a draft.
-        if report.status == Report.Status.SUBMITTED:
-            instructor = report.intern.assigned_instructor
-            if instructor:
-                Notification.objects.create(
-                    user=instructor.user,
-                    type="REPORT_SUBMITTED",
-                    message=(
-                        f"New report from "
-                        f"{self.request.user.get_full_name()}: "
-                        f"{report.title}"
-                    ),
-                )
-
-
-class InternReportDetailView(generics.RetrieveAPIView):
-    serializer_class = ReportSerializer
-    permission_classes = [IsIntern]
-
-    def get_queryset(self):
-        return Report.objects.filter(intern=self.request.user.intern_profile)
 
 
 # ============================================================================
@@ -2615,21 +2471,23 @@ def _messageable_users(user: User) -> models.QuerySet:
     """Queryset of users this role is allowed to thread with."""
     if user.role == "ADMIN":
         return User.objects.exclude(pk=user.pk)
-        
+
     if user.role == "INSTRUCTOR":
         intern_ids = User.objects.filter(
             intern_profile__assigned_instructor=user.instructor_profile
         ).values_list("pk", flat=True)
-        return User.objects.filter(
-            models.Q(pk__in=intern_ids) | models.Q(role="ADMIN")
-        ).exclude(pk=user.pk).distinct()
-        
+        return (
+            User.objects.filter(models.Q(pk__in=intern_ids) | models.Q(role="ADMIN"))
+            .exclude(pk=user.pk)
+            .distinct()
+        )
+
     # INTERN
     q = models.Q(role="ADMIN")
     intern = getattr(user, "intern_profile", None)
     if intern and getattr(intern, "assigned_instructor_id", None):
         q |= models.Q(pk=intern.assigned_instructor.user_id)
-        
+
     return User.objects.filter(q).exclude(pk=user.pk).distinct()
 
 
@@ -2822,9 +2680,7 @@ def messageable_users(request: Request) -> Response:
             "last_name": u.last_name,
             "role": u.role,
             "profile_picture": (
-                u.profile_picture.url
-                if getattr(u, "profile_picture", None)
-                else None
+                u.profile_picture.url if getattr(u, "profile_picture", None) else None
             ),
         }
         for u in users

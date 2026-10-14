@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
-  FileText,
   LayoutGrid,
   ListChecks,
   MessageSquare,
@@ -18,7 +17,6 @@ import { useInstructorDashboardContext } from "@/contexts/useInstructorDashboard
 const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
   "/dashboard/instructor": { title: "Overview" },
   "/dashboard/instructor/interns": { title: "My Interns" },
-  "/dashboard/instructor/reports": { title: "Reports" },
   "/dashboard/instructor/messages": { title: "Messages" },
   "/dashboard/instructor/tasks": { title: "Tasks" },
   "/dashboard/instructor/notifications": { title: "Notifications" },
@@ -48,11 +46,6 @@ function InstructorShell() {
             to: "/dashboard/instructor/interns",
             label: "My Interns",
             icon: Users,
-          },
-          {
-            to: "/dashboard/instructor/reports",
-            label: "Reports",
-            icon: FileText,
           },
           {
             to: "/dashboard/instructor/messages",

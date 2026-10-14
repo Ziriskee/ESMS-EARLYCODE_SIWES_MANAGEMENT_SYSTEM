@@ -94,9 +94,9 @@ export function DocumentsStep({
   return (
     <div className="space-y-5">
       <p className="text-[12.5px]" style={{ color: "var(--muted)" }}>
-        Optional. You can upload one, both, or neither — the intern will be
-        accepted either way. If you skip, you can upload later from the intern's
-        profile.
+        Optional — anything you skip is generated automatically from the
+        intern's data when you complete the wizard. Manual uploads always win
+        over generated files.
       </p>
 
       <FileSlot

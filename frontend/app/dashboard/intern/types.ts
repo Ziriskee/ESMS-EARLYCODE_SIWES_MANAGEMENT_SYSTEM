@@ -15,7 +15,6 @@ export type Placement = {
 };
 
 export type DashboardStats = {
-  reports_submitted: number;
   tasks_pending: number;
   tasks_completed: number;
   unread_messages: number;
@@ -23,12 +22,7 @@ export type DashboardStats = {
   unread_notifications: number;
 };
 
-export type RecentReport = {
-  id: string;
-  title: string;
-  submitted_at: string;
-  status: "SUBMITTED" | "REVIEWED";
-};
+
 
 export type UpcomingDay = {
   date: string;
@@ -46,6 +40,5 @@ export type DashboardData = {
   user: DashboardUser;
   placement: Placement | null;
   stats: DashboardStats;
-  recent_reports: RecentReport[];
   attendance: Attendance;
 };

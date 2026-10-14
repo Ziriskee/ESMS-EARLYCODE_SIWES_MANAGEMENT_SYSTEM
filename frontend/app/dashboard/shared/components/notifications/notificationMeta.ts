@@ -1,7 +1,8 @@
 import {
+  AlarmClock,
   CalendarClock,
   ClipboardCheck,
-  FileText,
+  Clock,
   ListChecks,
   MessageSquare,
   Upload,
@@ -13,8 +14,8 @@ export type NotificationType =
   | "TASK_ASSIGNED"
   | "TASK_SUBMITTED"
   | "TASK_REVIEWED"
-  | "REPORT_SUBMITTED"
-  | "REPORT_REVIEWED"
+  | "TASK_DUE_SOON"
+  | "TASK_OVERDUE"
   | "MESSAGE_RECEIVED"
   | "SCHEDULE_UPDATED"
   | "INSTRUCTOR_ASSIGNED"
@@ -42,16 +43,17 @@ export const notificationMeta: Record<NotificationType, Meta> = {
     bgToken: "--notif-task-bg",
     iconToken: "--notif-task-icon",
   },
-  REPORT_SUBMITTED: {
-    icon: FileText,
-    bgToken: "--notif-report-bg",
-    iconToken: "--notif-report-icon",
+  TASK_DUE_SOON: {
+    icon: Clock,
+    bgToken: "--notif-schedule-bg",
+    iconToken: "--notif-schedule-icon",
   },
-  REPORT_REVIEWED: {
-    icon: FileText,
-    bgToken: "--notif-report-bg",
-    iconToken: "--notif-report-icon",
+  TASK_OVERDUE: {
+    icon: AlarmClock,
+    bgToken: "--status-action-bg",
+    iconToken: "--status-action-text",
   },
+
   MESSAGE_RECEIVED: {
     icon: MessageSquare,
     bgToken: "--notif-message-bg",
@@ -85,12 +87,18 @@ export function getNotificationMeta(type: string): Meta {
 }
 
 // ── Type grouping for the feed filter ────────────────────────────
-export type NotificationGroup = "all" | "tasks" | "reports" | "messages" | "system";
+export type NotificationGroup =
+  | "all"
+  | "tasks"
+  | "messages"
+  | "system";
 
-export const NOTIFICATION_GROUPS: Record<NotificationGroup, NotificationType[]> = {
+export const NOTIFICATION_GROUPS: Record<
+  NotificationGroup,
+  NotificationType[]
+> = {
   all: [],
   tasks: ["TASK_ASSIGNED", "TASK_SUBMITTED", "TASK_REVIEWED"],
-  reports: ["REPORT_SUBMITTED", "REPORT_REVIEWED"],
   messages: ["MESSAGE_RECEIVED"],
   system: ["SCHEDULE_UPDATED", "INSTRUCTOR_ASSIGNED"],
 };
@@ -98,7 +106,6 @@ export const NOTIFICATION_GROUPS: Record<NotificationGroup, NotificationType[]> 
 export const GROUP_LABELS: Record<NotificationGroup, string> = {
   all: "All",
   tasks: "Tasks",
-  reports: "Reports",
   messages: "Messages",
   system: "System",
 };

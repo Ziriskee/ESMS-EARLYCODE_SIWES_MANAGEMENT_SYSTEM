@@ -19,6 +19,7 @@ type AllInternsTableProps = {
   totalPages: number;
   onPageChange: (page: number) => void;
   onRowClick: (intern: AllInternSummary) => void;
+  onOpenDocuments: (intern: AllInternSummary) => void;
   onAssignInstructor: (intern: AllInternSummary) => void;
   onConfigure: (intern: AllInternSummary) => void;
   onDeactivate: (intern: AllInternSummary) => void;
@@ -69,12 +70,14 @@ export function AllInternsTable({
   totalPages,
   onPageChange,
   onRowClick,
+  onOpenDocuments,
   onAssignInstructor,
   onConfigure,
   onDeactivate,
 }: AllInternsTableProps) {
   const buildItems = (intern: AllInternSummary): ActionMenuItem[] => [
     { label: "View", onClick: () => onRowClick(intern) },
+        { label: "Documents", onClick: () => onOpenDocuments(intern) },
     {
       label: "Assign Instructor",
       onClick: () => onAssignInstructor(intern),

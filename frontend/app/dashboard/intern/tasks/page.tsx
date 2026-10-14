@@ -15,6 +15,8 @@ function chipFor(status: InternTaskAssignment["status"]) {
       return { tone: "approved" as const, label: "Reviewed" };
     case "SUBMITTED":
       return { tone: "review" as const, label: "Submitted" };
+    case "NEEDS_REVISION":
+      return { tone: "action" as const, label: "Needs revision" };
     case "PENDING":
     default:
       return { tone: "neutral" as const, label: "Pending" };
@@ -41,6 +43,13 @@ function isOverdue(a: InternTaskAssignment): boolean {
   );
 }
 
+function isDueSoon(a: InternTaskAssignment): boolean {
+  if (!a.task.due_date) return false;
+  if (a.status !== "PENDING" && a.status !== "NEEDS_REVISION") return false;
+  const delta = new Date(a.task.due_date).getTime() - Date.now();
+  return delta > 0 && delta <= 48 * 60 * 60 * 1000;
+}
+
 function dueSortValue(a: InternTaskAssignment): number {
   if (!a.task.due_date) return Number.MAX_SAFE_INTEGER;
   return new Date(a.task.due_date).getTime();
@@ -57,8 +66,12 @@ export default function InternTasksPage() {
     () => [...tasks].sort((a, b) => dueSortValue(a) - dueSortValue(b)),
     [tasks],
   );
-  const todo = sorted.filter((t) => t.status === "PENDING");
-  const done = sorted.filter((t) => t.status !== "PENDING");
+  const todo = sorted.filter(
+    (t) => t.status === "PENDING" || t.status === "NEEDS_REVISION",
+  );
+  const done = sorted.filter(
+    (t) => t.status === "SUBMITTED" || t.status === "REVIEWED",
+  );
   const visible = tab === "all" ? sorted : tab === "todo" ? todo : done;
 
   const selected = tasks.find((t) => t.id === selectedId) ?? null;
@@ -198,11 +211,14 @@ export default function InternTasksPage() {
                               style={{
                                 color: overdue
                                   ? "var(--status-action-text)"
-                                  : "var(--muted)",
+                                  : isDueSoon(a)
+                                    ? "var(--status-review-text)"
+                                    : "var(--muted)",
                               }}
                             >
                               {formatDate(a.task.due_date)}
                               {overdue && " · overdue"}
+                              {isDueSoon(a) && " · due soon"}
                             </span>
                           </td>
                           <td className="py-5 px-4">

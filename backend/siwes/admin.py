@@ -17,7 +17,6 @@ from .models import (
     InternSchedule,
     Task,
     TaskAssignment,
-    Report,
     Message,
     Notification,
     InternDocument,
@@ -129,15 +128,6 @@ class TaskAssignmentAdmin(admin.ModelAdmin):
     list_display = ["task", "intern", "status", "submitted_at"]
     list_filter = ["status"]
     search_fields = ["task__title", "intern__user__email"]
-
-
-@admin.register(Report)
-class ReportAdmin(admin.ModelAdmin):
-    list_display = ["title", "intern", "status", "admin_seen", "submitted_at"]
-    list_filter = ["status", "admin_seen"]
-    search_fields = ["title", "intern__user__email"]
-    date_hierarchy = "submitted_at"
-
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):

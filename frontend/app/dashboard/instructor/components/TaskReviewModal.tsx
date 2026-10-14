@@ -17,18 +17,16 @@ export function TaskReviewModal({
   onReviewed,
 }: TaskReviewModalProps) {
   const [feedback, setFeedback] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<"" | "REVIEWED" | "NEEDS_REVISION">("");
   const [error, setError] = useState<string | null>(null);
-
   if (!assignment) return null;
-
-  const handleReview = async () => {
+  const handleReview = async (decision: "REVIEWED" | "NEEDS_REVISION") => {
     const text = feedback.trim();
     if (text.length < 10) {
       setError("Feedback must be at least 10 characters.");
       return;
     }
-    setSaving(true);
+    setSaving(decision);
     setError(null);
     try {
       const res = await fetch(
@@ -37,7 +35,7 @@ export function TaskReviewModal({
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ feedback: text }),
+          body: JSON.stringify({ feedback: text, status: decision }),
         },
       );
       const data = await res.json().catch(() => null);
@@ -49,7 +47,7 @@ export function TaskReviewModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setSaving(false);
+      setSaving("");
     }
   };
 
@@ -62,36 +60,53 @@ export function TaskReviewModal({
       icon={<ClipboardCheck size={18} strokeWidth={1.75} />}
       size="sm"
       footer={
-        <div className="flex items-center justify-end gap-2 w-full">
+        <div className="flex items-center justify-between gap-3 w-full">
           <button
             type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="h-9 px-5 rounded-full text-[13px] font-semibold"
+            onClick={() => handleReview("NEEDS_REVISION")}
+            disabled={saving !== ""}
+            className="h-9 px-4 rounded-full text-[13px] font-semibold transition-colors"
             style={{
-              backgroundColor: "var(--surface2)",
-              color: "var(--text)",
-              border: "1px solid var(--line)",
-              opacity: saving ? 0.5 : 1,
-              cursor: saving ? "not-allowed" : "pointer",
+              backgroundColor: "transparent",
+              color: "var(--status-action-text)",
+              border: "1px solid var(--status-action-bg)",
+              opacity: saving === "" ? 1 : 0.5,
+              cursor: saving === "" ? "pointer" : "not-allowed",
             }}
           >
-            Cancel
+            {saving === "NEEDS_REVISION" ? "Saving..." : "Request revision"}
           </button>
-          <button
-            type="button"
-            onClick={handleReview}
-            disabled={saving}
-            className="h-9 px-5 rounded-full text-[13px] font-semibold"
-            style={{
-              backgroundColor: "var(--gold-500)",
-              color: "var(--coal)",
-              opacity: saving ? 0.6 : 1,
-              cursor: saving ? "not-allowed" : "pointer",
-            }}
-          >
-            {saving ? "Saving..." : "Mark reviewed"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving !== ""}
+              className="h-9 px-5 rounded-full text-[13px] font-semibold"
+              style={{
+                backgroundColor: "var(--surface2)",
+                color: "var(--text)",
+                border: "1px solid var(--line)",
+                opacity: saving === "" ? 1 : 0.5,
+                cursor: saving === "" ? "not-allowed" : "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReview("REVIEWED")}
+              disabled={saving !== ""}
+              className="h-9 px-5 rounded-full text-[13px] font-semibold"
+              style={{
+                backgroundColor: "var(--gold-500)",
+                color: "var(--coal)",
+                opacity: saving === "" ? 1 : 0.6,
+                cursor: saving === "" ? "not-allowed" : "pointer",
+              }}
+            >
+              {saving === "REVIEWED" ? "Saving..." : "Mark reviewed"}
+            </button>
+          </div>
         </div>
       }
     >
@@ -117,7 +132,8 @@ export function TaskReviewModal({
             }}
           />
           <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-            Minimum 10 characters. The intern sees this text with the review.
+            Minimum 10 characters. The intern sees this text whether you mark it
+            reviewed or send it back for revision.
           </p>
         </div>
         {error && (

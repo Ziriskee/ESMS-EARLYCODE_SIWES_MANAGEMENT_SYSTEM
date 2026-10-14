@@ -14,6 +14,7 @@ import type { AllInternSummary, InternSubmission } from "../types";
 import { apiFetch } from "@/lib/api";
 import { ConfirmModal } from "../../shared/ui/ConfirmModal";
 import { EditSubmissionModal } from "../components/EditSubmissionModal";
+import { InternDocumentsModal } from "../components/InternDocumentsModal";
 
 export default function AdminAllInternsPage() {
   const { campus } = useCampusFilter();
@@ -54,6 +55,8 @@ export default function AdminAllInternsPage() {
   const [assignIntern, setAssignIntern] = useState<AllInternSummary | null>(
     null,
   );
+    const [documentsIntern, setDocumentsIntern] =
+      useState<AllInternSummary | null>(null);
 
   const handleRowClick = (intern: AllInternSummary) => {
     setSelectedId(String(intern.id));
@@ -102,6 +105,7 @@ export default function AdminAllInternsPage() {
           totalPages={totalPages}
           onPageChange={setPage}
           onRowClick={handleRowClick}
+          onOpenDocuments={(i) => setDocumentsIntern(i)}
           onAssignInstructor={(i) => setAssignIntern(i)}
           onConfigure={async (i) => {
             try {
@@ -156,6 +160,18 @@ export default function AdminAllInternsPage() {
         intern={assignIntern}
         onAssigned={refetch}
       />
+
+      <InternDocumentsModal
+        open={documentsIntern !== null}
+        onClose={() => setDocumentsIntern(null)}
+        internId={documentsIntern?.id ?? null}
+        internName={
+          documentsIntern
+            ? `${documentsIntern.user.first_name} ${documentsIntern.user.last_name}`
+            : ""
+        }
+      />
+
       <ConfirmModal
         open={deactivateIntern !== null}
         onClose={deactivating ? () => {} : () => setDeactivateIntern(null)}

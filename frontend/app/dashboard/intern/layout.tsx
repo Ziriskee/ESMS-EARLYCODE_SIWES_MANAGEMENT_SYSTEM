@@ -4,7 +4,7 @@ import {
   Bell,
   LayoutGrid,
   MessageSquare,
-  FileText,
+  
   ListChecks,
 } from "lucide-react";
 import { Sidebar } from "../shared/layout/Sidebar";
@@ -17,7 +17,6 @@ import { NotificationsProvider } from "@/contexts/NotificationsContext";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
   "/dashboard/intern": { title: "Overview" },
-  "/dashboard/intern/reports": { title: "Reports" },
   "/dashboard/intern/tasks": { title: "Tasks" },
   "/dashboard/intern/messages": { title: "Messages" },
   "/dashboard/intern/notifications": { title: "Notifications" },
@@ -36,7 +35,6 @@ function InternShell() {
   const { notifications } = useNotificationsContext();
   const notificationCount = notifications.filter((n) => !n.is_read).length;
   const messageCount = data?.stats.unread_conversations ?? 0;
-  const reportCount = data?.stats.reports_submitted ?? 0;
   const taskCount = data?.stats.tasks_pending ?? 0;
 
   const isOverview = location.pathname === "/dashboard/intern";
@@ -58,12 +56,6 @@ function InternShell() {
         appLabel="Intern Space"
         navItems={[
           { to: "/dashboard/intern", label: "Overview", icon: LayoutGrid },
-          {
-            to: "/dashboard/intern/reports",
-            label: "Reports",
-            icon: FileText,
-            badge: reportCount,
-          },
           {
             to: "/dashboard/intern/tasks",
             label: "Tasks",

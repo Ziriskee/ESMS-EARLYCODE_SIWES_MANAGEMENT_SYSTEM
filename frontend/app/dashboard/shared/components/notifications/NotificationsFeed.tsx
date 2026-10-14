@@ -91,7 +91,6 @@ const visible = useMemo(() => {
                 [
                   "all",
                   "tasks",
-                  "reports",
                   "messages",
                   "system",
                 ] as NotificationGroup[]
@@ -142,7 +141,7 @@ const visible = useMemo(() => {
       {!loading && !error && notifications.length === 0 && (
         <EmptyState
           title="No notifications yet."
-          description="Updates about your interns and reports will appear here."
+          description="Updates about your interns and others will appear here."
         />
       )}
       {!loading &&

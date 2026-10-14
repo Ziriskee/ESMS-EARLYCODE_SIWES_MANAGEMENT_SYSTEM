@@ -6,8 +6,6 @@ export type InstructorDashboardData = {
   stats: {
     total_interns: number;
     active_interns: number;
-    pending_reports: number;
-    reviewed_reports: number;
     unread_conversations: number;
   };
   interns: Array<{
@@ -19,12 +17,7 @@ export type InstructorDashboardData = {
     school_start_date: string | null;
     school_end_date: string | null;
   }>;
-  pending_reports: Array<{
-    id: string;
-    title: string;
-    intern: { id: number; name: string };
-    submitted_at: string;
-  }>;
+
   recently_reviewed: Array<{
     id: string;
     title: string;

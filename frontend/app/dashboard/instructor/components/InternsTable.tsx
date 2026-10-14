@@ -34,7 +34,7 @@ export function InternsTable({
   error,
   onSelect,
 }: InternsTableProps) {
-  const pendingReports = interns.reduce((n, i) => n + i.reports_pending, 0);
+  
 
   return (
     <Card padding="lg">
@@ -48,9 +48,7 @@ export function InternsTable({
         </h2>
         <p className="text-[12px] mt-1" style={{ color: "var(--muted)" }}>
           {interns.length} assigned
-          {pendingReports > 0
-            ? ` · ${pendingReports} report${pendingReports === 1 ? "" : "s"} awaiting review`
-            : ""}
+         
         </p>
       </div>
 
@@ -86,7 +84,7 @@ export function InternsTable({
                   <th className="w-[34%] font-semibold py-3 pr-4">Name</th>
                   <th className="w-[12%] font-semibold py-3 px-4">Campus</th>
                   <th className="w-[14%] font-semibold py-3 px-4">Status</th>
-                  <th className="w-[32%] font-semibold py-3 px-4">Reports</th>
+          
                   <th className="w-[8%] font-semibold py-3 pl-4" />
                 </tr>
               </thead>
@@ -128,21 +126,7 @@ export function InternsTable({
                       <td className="py-5 px-4">
                         <StatusChip tone={chip.tone} label={chip.label} />
                       </td>
-                      <td className="py-5 px-4">
-                        {intern.reports_pending > 0 ? (
-                          <StatusChip
-                            tone="review"
-                            label={`${intern.reports_pending} to review`}
-                          />
-                        ) : (
-                          <span
-                            className="text-[13px]"
-                            style={{ color: "var(--muted)" }}
-                          >
-                            {intern.reports_total} submitted
-                          </span>
-                        )}
-                      </td>
+                      
                       <td className="py-5 pl-4 text-right">
                         <ChevronRight
                           size={16}
@@ -204,12 +188,7 @@ export function InternsTable({
                     >
                       {formatCampus(intern.preferred_campus)}
                     </span>
-                    {intern.reports_pending > 0 && (
-                      <StatusChip
-                        tone="review"
-                        label={`${intern.reports_pending} to review`}
-                      />
-                    )}
+                   
                   </div>
                 </button>
               );

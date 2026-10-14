@@ -1,8 +1,7 @@
-import { useNavigate } from "react-router-dom";
 import { Card } from "../shared/ui/Card";
 import { EmptyState } from "../shared/ui/EmptyState";
-import { FileText, Users, UserCheck, CheckCircle } from "lucide-react";
-import { useInstructorDashboardContext } from "@/contexts/useInstructorDashboardContext";
+import { CheckCircle, MessageSquare, UserCheck, Users } from "lucide-react";
+import { useInstructorDashboard } from "./hooks/useInstructorDashboard";
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -17,23 +16,8 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const sec = Math.floor((now - then) / 1000);
-  if (sec < 60) return "Just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const days = Math.floor(hr / 24);
-  if (days < 7) return `${days}d ago`;
-  return formatDate(iso);
-}
-
 export default function InstructorOverviewPage() {
-  const { data, loading, error } = useInstructorDashboardContext();
-  const navigate = useNavigate();
+  const { data, loading, error } = useInstructorDashboard();
 
   if (loading) {
     return (
@@ -44,7 +28,6 @@ export default function InstructorOverviewPage() {
       </Card>
     );
   }
-
   if (error || !data) {
     return (
       <Card padding="lg">
@@ -56,11 +39,9 @@ export default function InstructorOverviewPage() {
     );
   }
 
-  const { stats, interns, pending_reports, recently_reviewed } = data;
-
+  const { stats, interns } = data;
   return (
     <div className="space-y-5 sm:space-y-6 md:space-y-8">
-      {/* Stats Row */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={Users}
@@ -77,181 +58,21 @@ export default function InstructorOverviewPage() {
           accent={false}
         />
         <StatCard
-          icon={FileText}
-          label="Pending Reports"
-          value={stats.pending_reports}
-          sub="Awaiting your review"
+          icon={CheckCircle}
+          label="Tasks to review"
+          value={stats.tasks_awaiting_review}
+          sub="Submissions awaiting feedback"
           accent={true}
         />
         <StatCard
-          icon={CheckCircle}
-          label="Reviewed Reports"
-          value={stats.reviewed_reports}
-          sub="All time"
+          icon={MessageSquare}
+          label="Unread messages"
+          value={stats.unread_messages}
+          sub="From interns and admins"
           accent={false}
         />
       </section>
 
-      {/* Two-column: Pending Reports + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Pending Reports */}
-        <Card padding="lg">
-          <div className="mb-4">
-            <h2
-              className="text-[18px] sm:text-[20px] font-semibold leading-tight"
-              style={{
-                color: "var(--text)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Reports to review
-            </h2>
-            <p className="text-[12px] mt-1" style={{ color: "var(--muted)" }}>
-              {pending_reports.length} pending
-            </p>
-          </div>
-          {pending_reports.length === 0 ? (
-            <EmptyState
-              title="No pending reports."
-              description="Reports submitted by your interns will appear here."
-            />
-          ) : (
-            <ul className="flex flex-col">
-              {pending_reports.slice(0, 5).map((report, i) => (
-                <li key={report.id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate("/dashboard/instructor/reports", {
-                        state: { openId: report.id },
-                      })
-                    }
-                    className="w-full flex items-start gap-3 py-3.5 -mx-2 px-2 rounded-xl text-left transition-colors hover:bg-[var(--tint)]"
-                    style={{
-                      borderTop: i === 0 ? "none" : "1px solid var(--line)",
-                    }}
-                  >
-                    <div className="h-9 w-9 rounded-full grid place-items-center shrink-0 mt-0.5">
-                      <FileText
-                        size={16}
-                        strokeWidth={1.8}
-                        style={{ color: "var(--gold-700)" }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="text-[14px] font-semibold leading-snug truncate"
-                        style={{ color: "var(--text)" }}
-                      >
-                        {report.title}
-                      </p>
-                      <p
-                        className="text-[12px] mt-0.5 truncate"
-                        style={{ color: "var(--muted)" }}
-                      >
-                        {report.intern.name}
-                      </p>
-                    </div>
-                    <span
-                      className="text-[11px] shrink-0 pt-0.5"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {relativeTime(report.submitted_at)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {pending_reports.length > 5 && (
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard/instructor/reports")}
-              className="mt-3 text-[12.5px] font-semibold"
-              style={{ color: "var(--gold-800)" }}
-            >
-              View all {pending_reports.length} reports →
-            </button>
-          )}
-        </Card>
-
-        {/* Recent Activity */}
-        <Card padding="lg">
-          <div className="mb-4">
-            <h2
-              className="text-[18px] sm:text-[20px] font-semibold leading-tight"
-              style={{
-                color: "var(--text)",
-                fontFamily: "var(--font-display)",
-              }}
-            >
-              Recent activity
-            </h2>
-            <p className="text-[12px] mt-1" style={{ color: "var(--muted)" }}>
-              Reports you've reviewed
-            </p>
-          </div>
-          {recently_reviewed.length === 0 ? (
-            <EmptyState
-              title="No recent activity."
-              description="Reports you approve or send back for revision will appear here."
-            />
-          ) : (
-            <ul className="flex flex-col">
-              {recently_reviewed.slice(0, 5).map((report, i) => (
-                <li key={report.id}>
-                  <div
-                    className="flex items-start gap-3 py-3.5 -mx-2 px-2"
-                    style={{
-                      borderTop: i === 0 ? "none" : "1px solid var(--line)",
-                    }}
-                  >
-                    <div className="h-9 w-9 rounded-full grid place-items-center shrink-0 mt-0.5">
-                      <CheckCircle
-                        size={16}
-                        strokeWidth={1.8}
-                        style={{
-                          color:
-                            report.status === "APPROVED"
-                              ? "var(--status-approved-text)"
-                              : "var(--status-review-text)",
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="text-[14px] font-semibold leading-snug truncate"
-                        style={{ color: "var(--text)" }}
-                      >
-                        {report.title}
-                      </p>
-                      <p
-                        className="text-[12px] mt-0.5 truncate"
-                        style={{ color: "var(--muted)" }}
-                      >
-                        {report.intern.name} ·{" "}
-                        {report.status === "APPROVED"
-                          ? "Approved"
-                          : "Needs revision"}
-                      </p>
-                    </div>
-                    <span
-                      className="text-[11px] shrink-0 pt-0.5"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {report.reviewed_at
-                        ? relativeTime(report.reviewed_at)
-                        : "—"}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      {/* My Interns (compact list) */}
       <Card padding="lg">
         <div className="mb-4">
           <h2

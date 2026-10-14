@@ -33,14 +33,13 @@ export function StatsRow({ stats }: StatsRowProps) {
       accent: false,
     },
     {
-      label: "Unread reports",
-      value: pad2(stats.unread_reports),
-      sub: "Submitted, not seen",
+      label: "Missing documents",
+      value: pad2(stats.missing_documents),
+      sub: "Active interns without full docs",
       icon: FileText,
       accent: true,
     },
   ];
-
   return (
     <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {items.map((item) => {
@@ -78,7 +77,6 @@ export function StatsRow({ stats }: StatsRowProps) {
                 />
               </>
             )}
-
             <div className="relative flex items-start justify-between gap-2">
               <div
                 className="grid h-10 w-10 place-items-center rounded-xl"
@@ -98,7 +96,6 @@ export function StatsRow({ stats }: StatsRowProps) {
                 <Icon size={18} strokeWidth={1.8} />
               </div>
             </div>
-
             <p
               className="relative mt-7 text-[11px] font-semibold uppercase tracking-[0.2em]"
               style={
@@ -109,7 +106,6 @@ export function StatsRow({ stats }: StatsRowProps) {
             >
               {item.label}
             </p>
-
             <p
               className="relative mt-2 text-4xl md:text-[42px] font-semibold leading-none tracking-tight"
               style={{
@@ -119,7 +115,6 @@ export function StatsRow({ stats }: StatsRowProps) {
             >
               {item.value}
             </p>
-
             <p
               className="relative mt-3 text-xs"
               style={

@@ -18,8 +18,6 @@ from .models import (
     InternSchedule,
     Task,
     TaskAssignment,
-    Report,
-    Message,
     Notification,
 )
 
@@ -588,65 +586,6 @@ class InstructorTaskSerializer(serializers.ModelSerializer):
             for a in obj.assignments.select_related("intern__user").all()
         ]
 
-
-# ───────────────────────────────────────────────────────────────
-# REPORT SERIALIZERS
-# ───────────────────────────────────────────────────────────────
-
-
-class ReportSerializer(serializers.ModelSerializer):
-    """
-    Serializer for reports. Allows interns to create reports with status
-    DRAFT or SUBMITTED. The REVIEWED status is set by instructors only,
-    so it is rejected on create.
-    """
-
-    class Meta:
-        model = Report
-        fields = [
-            "id",
-            "intern",
-            "title",
-            "content",
-            "submitted_at",
-            "status",
-            "instructor_feedback",
-            "admin_seen",
-        ]
-        read_only_fields = [
-            "id",
-            "intern",
-            "submitted_at",
-            "admin_seen",
-            "instructor_feedback",
-        ]
-
-    def validate_status(self, value):
-        # Interns can only set DRAFT or SUBMITTED on create.
-        # REVIEWED is reserved for the review workflow.
-        if value == Report.Status.REVIEWED:
-            raise serializers.ValidationError(
-                "Status REVIEWED can only be set by an instructor."
-            )
-        return value
-
-    def validate(self, attrs):
-        # On create, default status is SUBMITTED if not provided.
-        request = self.context.get("request")
-        if request and request.method == "POST" and "status" not in attrs:
-            attrs["status"] = Report.Status.SUBMITTED
-        return attrs
-
-
-class RecentReportSerializer(serializers.ModelSerializer):
-    """
-    Minimal report shape for the dashboard's 'Recent reports' list.
-    Only the fields the dashboard actually renders.
-    """
-
-    class Meta:
-        model = Report
-        fields = ["id", "title", "submitted_at", "status"]
 
 
 # ───────────────────────────────────────────────────────────────

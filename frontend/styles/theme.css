@@ -39,8 +39,6 @@
   /* ---------- Notification types ---------- */
   --notif-task-bg: rgba(255, 255, 255, 0.06);
   --notif-task-icon: #9b9ba2;
-  --notif-report-bg: rgba(109, 209, 150, 0.12);
-  --notif-report-icon: #6fd196;
   --notif-message-bg: rgba(122, 184, 232, 0.12);
   --notif-message-icon: #7ab8e8;
   --notif-schedule-bg: rgba(255, 214, 10, 0.14);
@@ -119,8 +117,6 @@
 
   --notif-task-bg: rgba(23, 22, 26, 0.06);
   --notif-task-icon: #6e6c75;
-  --notif-report-bg: rgba(30, 122, 62, 0.08);
-  --notif-report-icon: #1e7a3e;
   --notif-message-bg: rgba(42, 93, 168, 0.08);
   --notif-message-icon: #2a5da8;
   --notif-schedule-bg: rgba(138, 109, 20, 0.1);

@@ -69,7 +69,6 @@ export default function InstructorProfilePage() {
             { label: "Email", value: profile.email, locked: true },
             { label: "Phone", value: profile.phone },
           ]}
-          onEdit={() => setEditOpen(true)}
         />
 
         <ProfileSection
@@ -87,7 +86,6 @@ export default function InstructorProfilePage() {
               locked: true,
             },
           ]}
-          onEdit={() => setEditOpen(true)}
         />
 
         <p className="text-[11.5px]" style={{ color: "var(--muted)" }}>

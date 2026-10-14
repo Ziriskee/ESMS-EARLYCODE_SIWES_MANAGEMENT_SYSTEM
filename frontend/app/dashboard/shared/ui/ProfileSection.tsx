@@ -16,8 +16,6 @@ type ProfileSectionProps = {
 export function ProfileSection({
   title,
   fields,
-  onEdit,
-  editLabel = "Edit",
 }: ProfileSectionProps) {
   return (
     <Card padding="lg">
@@ -28,19 +26,7 @@ export function ProfileSection({
         >
           {title}
         </h3>
-        {onEdit && (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="h-8 px-4 rounded-full text-[12.5px] font-semibold shrink-0 transition-colors"
-            style={{
-              backgroundColor: "var(--gold-500)",
-              color: "var(--coal)",
-            }}
-          >
-            {editLabel}
-          </button>
-        )}
+        
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
         {fields.map((f) => (

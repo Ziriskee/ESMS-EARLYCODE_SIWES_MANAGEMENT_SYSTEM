@@ -1,6 +1,6 @@
 // Shared types for the instructor dashboard.
 
-export type InstructorNavKey = "overview" | "interns" | "reports" | "profile";
+export type InstructorNavKey = "overview" | "interns" |  "profile";
 
 export type AssignedInternUser = {
   id: string;
@@ -19,8 +19,7 @@ export type AssignedInternSummary = {
   school_end_date: string | null;
   course_of_study: string;
   current_institution: string;
-  reports_total: number;
-  reports_pending: number;
+ 
 };
 
 export type MyInternsResponse = {
@@ -37,13 +36,7 @@ export type InternScheduleEntry = {
   is_rotating: boolean;
 };
 
-export type InternReportEntry = {
-  id: string;
-  title: string;
-  status: "DRAFT" | "SUBMITTED" | "REVIEWED" | "APPROVED" | "NEEDS_REVISION";
-  submitted_at: string;
-  instructor_feedback: string;
-};
+ 
 
 export type AssignedInternDetail = {
   id: number;
@@ -57,28 +50,11 @@ export type AssignedInternDetail = {
   current_level: string;
   matric_number: string;
   schedules: InternScheduleEntry[];
-  reports: InternReportEntry[];
+ 
 };
 
-export type InstructorReport = {
-  id: string;
-  title: string;
-  content: string;
-  status: "DRAFT" | "SUBMITTED" | "REVIEWED" | "APPROVED" | "NEEDS_REVISION";
-  submitted_at: string;
-  reviewed_at: string | null;
-  instructor_feedback: string;
-  intern: {
-    id: number;
-    name: string;
-    email: string;
-  };
-};
+ 
 
-export type InstructorReportsResponse = {
-  count: number;
-  results: InstructorReport[];
-};
 
 export type TaskAssignmentEntry = {
   id: string;
@@ -86,7 +62,7 @@ export type TaskAssignmentEntry = {
     id: number;
     name: string;
   };
-  status: "PENDING" | "SUBMITTED" | "REVIEWED";
+  status: "PENDING" | "SUBMITTED" | "REVIEWED" | "NEEDS_REVISION";
   submitted_at: string | null;
   instructor_feedback: string;
   submission_file_url: string | null;

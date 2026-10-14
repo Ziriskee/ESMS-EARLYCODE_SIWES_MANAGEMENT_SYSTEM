@@ -3,7 +3,6 @@ export type AdminNavKey =
   | "pending"
   | "interns"
   | "instructors"
-  | "reports"
   | "messages"
   | "notifications";
 
@@ -12,8 +11,7 @@ export type AdminDashboardStats = {
   total_instructors: number;
   pending_interns: number;
   active_interns: number;
-  total_reports: number;
-  unread_reports: number;
+  missing_documents: number;
   unread_conversations: number;
 };
 

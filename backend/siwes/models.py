@@ -399,6 +399,7 @@ class TaskAssignment(models.Model):
         PENDING = "PENDING", "Pending"
         SUBMITTED = "SUBMITTED", "Submitted"
         REVIEWED = "REVIEWED", "Reviewed"
+        NEEDS_REVISION = "NEEDS_REVISION", "Needs Revision"
 
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="assignments")
     intern = models.ForeignKey(
@@ -415,6 +416,8 @@ class TaskAssignment(models.Model):
         null=True,
         help_text="File uploaded by the intern when submitting the task.",
     )
+    due_soon_notified = models.BooleanField(default=False)
+    overdue_notified = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -426,41 +429,6 @@ class TaskAssignment(models.Model):
     def __str__(self):
         return f"{self.intern.full_name} - {self.task.title} ({self.status})"
 
-
-# ───────────────────────────────────────────────────────────────
-# 11. REPORTS (Intern-Submitted)
-# ───────────────────────────────────────────────────────────────
-
-
-class Report(models.Model):
-    """Reports submitted by interns."""
-
-    class Status(models.TextChoices):
-        DRAFT = "DRAFT", "Draft"
-        SUBMITTED = "SUBMITTED", "Submitted"
-        REVIEWED = "REVIEWED", "Reviewed"
-        APPROVED = "APPROVED", "Approved"
-        NEEDS_REVISION = "NEEDS_REVISION", "Needs Revision"
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    intern = models.ForeignKey(
-        InternProfile, on_delete=models.CASCADE, related_name="reports"
-    )
-    title = models.CharField(max_length=200)
-    content = models.TextField()
-    submitted_at = models.DateTimeField(auto_now_add=True,db_index=True)
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.SUBMITTED, db_index=True
-    )
-    instructor_feedback = models.TextField(blank=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    admin_seen = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ["-submitted_at"]
-
-    def __str__(self):
-        return f"{self.title} by {self.intern.full_name}"
 
 
 # ───────────────────────────────────────────────────────────────
@@ -528,12 +496,12 @@ class Notification(models.Model):
     """System notifications for users."""
 
     class Type(models.TextChoices):
-        REPORT_SUBMITTED = "REPORT_SUBMITTED", "Report Submitted"
-        REPORT_REVIEWED = "REPORT_REVIEWED", "Report Reviewed"
         TASK_ASSIGNED = "TASK_ASSIGNED", "Task Assigned"
         TASK_REVIEWED = "TASK_REVIEWED", "Task Reviewed"
         TASK_SUBMITTED = "TASK_SUBMITTED", "Task Submitted"
         MESSAGE_RECEIVED = "MESSAGE_RECEIVED", "Message Received"
+        TASK_DUE_SOON = "TASK_DUE_SOON", "Task Due Soon"
+        TASK_OVERDUE = "TASK_OVERDUE", "Task Overdue"
         SCHEDULE_UPDATED = "SCHEDULE_UPDATED", "Schedule Updated"
         INSTRUCTOR_ASSIGNED = "INSTRUCTOR_ASSIGNED", "Instructor Assigned"
         NEW_REGISTRATION = "NEW_REGISTRATION", "New Registration"
