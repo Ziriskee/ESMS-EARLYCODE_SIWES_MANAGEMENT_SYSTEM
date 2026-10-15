@@ -39,7 +39,15 @@ export default function InstructorOverviewPage() {
     );
   }
 
-  const { stats, interns } = data;
+  // Defensive fallback
+  const stats = data?.stats ?? {
+    total_interns: 0,
+    active_interns: 0,
+    tasks_awaiting_review: 0,
+    unread_messages: 0,
+  };
+  const interns = data?.interns ?? [];
+  
   return (
     <div className="space-y-5 sm:space-y-6 md:space-y-8">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -114,7 +122,7 @@ export default function InstructorOverviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {interns.map((intern) => (
+                {(interns ?? []).map((intern) => (
                   <tr
                     key={intern.id}
                     className="transition-colors hover:bg-[var(--tint)]"

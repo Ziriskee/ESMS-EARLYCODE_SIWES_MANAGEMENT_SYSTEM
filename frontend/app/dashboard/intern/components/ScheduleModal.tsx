@@ -46,7 +46,7 @@ export function ScheduleModal({
   days,
   hasSchedule,
 }: ScheduleModalProps) {
-  const isEmpty = !hasSchedule || days.length === 0;
+  const isEmpty = !hasSchedule || !days || days.length === 0;
 
   const meta = isEmpty
     ? undefined

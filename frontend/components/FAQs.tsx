@@ -20,22 +20,18 @@ const faqs: FAQItem[] = [
     question: "What courses can I do SIWES in?",
     answer:
       "We offer SIWES placements in Web Development, Data Science, UI/UX Design, Mobile App Development, Cybersecurity, and Office Productivity Tools. You can enroll in one or more courses depending on your school's approval and your interests.",
+  }, {
+    question: "What is the schedule like?",
+    answer:
+      "Interns are assigned to specific days and shifts (morning: 8:30 AM – 1:00 PM, or afternoon: 1:00 PM – 6:00 PM). Shift rotation happens automatically every week to ensure fair scheduling. Your exact schedule will be assigned by the admin after registration.",
   },
   {
     question: "Do I need to pay for SIWES training?",
     answer:
       "SIWES is designed as part of your academic curriculum. However, some specialized tracks may require a commitment fee. Please contact our front desk or send an email to info@earlycode.net for detailed information about any applicable fees.",
   },
-  {
-    question: "What is the schedule like?",
-    answer:
-      "Interns are assigned to specific days and shifts (morning: 8:30 AM – 1:00 PM, or afternoon: 1:00 PM – 6:00 PM). Shift rotation happens automatically every week to ensure fair scheduling. Your exact schedule will be assigned by the admin after registration.",
-  },
-  {
-    question: "Will I receive a certificate after completion?",
-    answer:
-      "Yes. Upon successful completion of your SIWES program, including submission of all required reports and assessments, you will receive a verifiable certificate from Early Code Institute that can be validated on our website.",
-  },
+ 
+
 ];
 
 export default function FAQs() {

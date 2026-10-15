@@ -1,3 +1,4 @@
+import logging
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.mail import send_mail
@@ -63,7 +64,7 @@ from .permissions import IsAdmin, IsInstructor, IsIntern
 
 User = get_user_model()
 signer = TimestampSigner()
-
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # AUTHENTICATION & MAGIC LINKS
@@ -179,7 +180,7 @@ class InternRegisterView(generics.CreateAPIView):
                 fail_silently=False,
             )
         except Exception as email_error:
-            print(f"Welcome email failed: {email_error}")
+            logging.error(f"Welcome email failed: {email_error}")
 
 
 @api_view(["POST"])
@@ -208,11 +209,12 @@ def request_magic_link(request):
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
     magic_link = f"{frontend_url}/verify-login?token={safe_token}"
 
-    if settings.DEBUG:
-        print("\n" + "🟢" * 30)
-        print(f"🔗 MAGIC LINK FOR {user.email}:")
-        print(magic_link)
-        print("🟢" * 30 + "\n")
+    # Security: Gate token logging behind an explicit env var.
+    # Default is OFF to prevent secrets in logs.
+    if getattr(settings, "LOG_MAGIC_LINKS", False):
+        logger.warning("MAGIC LINK GENERATED for %s: %s", user.email, magic_link)
+    else:
+        logger.info("MAGIC LINK GENERATED for %s (token hidden)", user.email)
 
     _send_magic_link_email(user, magic_link)
 
@@ -227,36 +229,32 @@ def verify_magic_link(request):
     Tries multiple candidate tokens to survive quoted-printable mail damage.
     """
     raw_token = request.query_params.get("token")
-
-    if settings.DEBUG:
-        print(f"\n🔍 RAW TOKEN: {raw_token}")
-        print(f"🔍 TOKEN LENGTH: {len(raw_token) if raw_token else 0}")
-
     if not raw_token:
         return Response(
             {"error": "Token is required"}, status=status.HTTP_400_BAD_REQUEST
         )
 
     candidates = _token_candidates(raw_token)
-
     user = None
     last_error = None
+
     for candidate in candidates:
         try:
-            if settings.DEBUG:
-                print(f"🔍 TRYING CANDIDATE: {candidate[:50]}...")
             email = signer.unsign(candidate, max_age=settings.MAGIC_LINK_MAX_AGE)
             user = User.objects.get(email__iexact=email.strip().lower())
-            if settings.DEBUG:
-                print(f"✅ UNSIGN SUCCESS: {email}")
             break
         except (SignatureExpired, BadSignature, User.DoesNotExist) as e:
             last_error = e
             continue
 
+    # 🔒 FIX: Use `raw_token` here, NOT `email`.
+    # If we reach this point, `email` was never successfully assigned.
     if user is None:
-        if settings.DEBUG:
-            print(f"❌ ALL CANDIDATES FAILED: {last_error}")
+        logger.warning(
+            "Magic link verification FAILED. Token: %r. Error: %s",
+            raw_token,
+            str(last_error),
+        )
         return Response(
             {"error": "Invalid or expired link"}, status=status.HTTP_400_BAD_REQUEST
         )
@@ -265,7 +263,6 @@ def verify_magic_link(request):
     user.save(update_fields=["last_login"])
 
     access = AccessToken.for_user(user)
-
     response = Response(
         {
             "success": True,
@@ -273,7 +270,6 @@ def verify_magic_link(request):
             "user": UserSerializer(user).data,
         }
     )
-
     response.set_cookie(
         key=settings.ACCESS_COOKIE_NAME,
         value=str(access),
@@ -283,7 +279,6 @@ def verify_magic_link(request):
         samesite="Lax",
         path="/",
     )
-
     return response
 
 
@@ -966,11 +961,10 @@ def _document_context(intern):
             b64 = base64.b64encode(f.read()).decode("utf-8")
         mime = "jpeg" if sig_path.suffix.lower() in (".jpg", ".jpeg") else "png"
         signature_data_uri = f"data:image/{mime};base64,{b64}"
-        print(f"✍️  Signature embedded: {sig_path.name}")
+        logger.info("Signature embedded: %s", sig_path.name)
     else:
         found = [p.name for p in logo_dir.glob("*signature*")]
-        print(f"️  No signature png/jpg in {logo_dir}. Found: {found}")
-        print("    (webp won't render in PDFs — convert it to PNG)")
+        logger.warning("No signature png/jpg found in %s. Found: %s", logo_dir, found)
 
     # ── Local TTF folder for @font-face ─────────────────────────
     fonts_dir_path = (
@@ -1048,11 +1042,10 @@ def generate_intern_documents(request, pk):
             results.append(
                 {
                     "type": doc_type,
-                    "file_url": doc.file.url,
+                    "file_url": existing.file.url,
                     "generated": True,
                 }
             )
-            created_types.append(doc_type)
             continue
 
         html = render_to_string(template, context)
@@ -1400,7 +1393,7 @@ def _notify_admins(user, intern):
             fail_silently=False,
         )
     except Exception as email_error:
-        print(f"Admin notification email failed: {email_error}")
+        logger.error("Admin notification email failed: %s", email_error)
 
 
 def _notify_admins_in_app(user):

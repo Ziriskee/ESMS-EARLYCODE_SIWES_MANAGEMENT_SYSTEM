@@ -34,7 +34,18 @@ export default function InternOverviewPage() {
     );
   }
 
-  const { user, placement, stats,  attendance } = data;
+  const { user, placement, stats, attendance } = data || {};
+  const safeStats = stats || {
+    tasks_completed: 0,
+    tasks_pending: 0,
+    unread_messages: 0,
+    unread_conversations: 0,
+    unread_notifications: 0,
+  };
+  const safeAttendance = attendance || {
+    has_schedule: false,
+    upcoming_days: [],
+  };
 
   return (
     <div className="space-y-8 pt-2">
@@ -54,18 +65,18 @@ export default function InternOverviewPage() {
       />
 
       <StatsRow
-        tasksCompleted={stats.tasks_completed}
-        tasksPending={stats.tasks_pending}
-        unreadMessages={stats.unread_messages}
+        tasksCompleted={safeStats.tasks_completed}
+        tasksPending={safeStats.tasks_pending}
+        unreadMessages={safeStats.unread_messages}
         daysRemaining={placement?.days_remaining ?? null}
       />
-
       <ScheduleModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        hasSchedule={attendance.has_schedule}
-        days={attendance.upcoming_days}
+        hasSchedule={safeAttendance.has_schedule}
+        days={safeAttendance.upcoming_days}
       />
     </div>
   );
 }
+

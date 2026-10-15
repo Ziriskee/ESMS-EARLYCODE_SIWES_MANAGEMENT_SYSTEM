@@ -55,6 +55,7 @@ export default function AdminAllInternsPage() {
   const [assignIntern, setAssignIntern] = useState<AllInternSummary | null>(
     null,
   );
+  
     const [documentsIntern, setDocumentsIntern] =
       useState<AllInternSummary | null>(null);
 

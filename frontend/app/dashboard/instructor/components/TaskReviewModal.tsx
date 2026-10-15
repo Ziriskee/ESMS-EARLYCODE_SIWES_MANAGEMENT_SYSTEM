@@ -65,7 +65,7 @@ export function TaskReviewModal({
             type="button"
             onClick={() => handleReview("NEEDS_REVISION")}
             disabled={saving !== ""}
-            className="h-9 px-4 rounded-full text-[13px] font-semibold transition-colors"
+            className="h-auto px-4 py-2 rounded-full text-[13px] font-semibold transition-colors lg:mr-14 hover:bg-red-400"
             style={{
               backgroundColor: "transparent",
               color: "var(--status-action-text)",
@@ -96,7 +96,7 @@ export function TaskReviewModal({
               type="button"
               onClick={() => handleReview("REVIEWED")}
               disabled={saving !== ""}
-              className="h-9 px-5 rounded-full text-[13px] font-semibold"
+              className="h-full py-2 px-5 rounded-full text-[13px] font-semibold"
               style={{
                 backgroundColor: "var(--gold-500)",
                 color: "var(--coal)",

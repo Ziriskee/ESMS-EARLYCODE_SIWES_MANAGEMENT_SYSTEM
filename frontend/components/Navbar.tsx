@@ -13,9 +13,14 @@ export default function Navbar() {
 
   return (
     <nav className="w-full px-10 py-5 flex items-center justify-between border-b border-white/10 backdrop-blur-sm sticky top-0 z-50 bg-ec-dark/90">
-      
       <div className="flex items-center gap-2">
-        <img src="/earlycode_logo.webp" alt="" width={40} height={40} className="w-10 h-auto" />
+        <img
+          src="/earlycode_logo.webp"
+          alt=""
+          width={40}
+          height={40}
+          className="w-10 h-auto"
+        />
         <div className="flex flex-col gap-0">
           <p className="text-xl font-bold tracking-wide uppercase font-nav">
             Early Code
@@ -38,12 +43,21 @@ export default function Navbar() {
         ))}
       </div>
 
-      <a
-        href="/register"
-        className="hidden md:inline-flex px-6 py-2.5 bg-ec-gold text-ec-dark rounded-full font-semibold text-sm hover:scale-105 transition-transform duration-300 font-body"
-      >
-        Apply Now
-      </a>
+      <div className=" flex items-center gap-6">
+        <Link
+          to="/login"
+          className="hidden md:inline-flex text-[17px] font-medium text-[#FBCD15] border border-[#FBCD15] px-8 py-1.75 rounded-full font-body hover:scale-105 transition-all duration-300"
+        >
+          Login
+        </Link>
+
+        <Link
+          to="/register"
+          className="hidden md:inline-flex px-6 py-2.5 bg-ec-gold text-ec-dark rounded-full font-semibold text-sm hover:scale-105 transition-transform duration-300 font-body"
+        >
+          Apply Now
+        </Link>
+      </div>
 
       <button
         className="md:hidden text-white"
@@ -77,13 +91,21 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
-          <Link
-            to="/register"
-            className="inline-block px-6 py-2.5 bg-ec-gold text-ec-dark rounded-full font-semibold text-sm"
-            onClick={() => setIsOpen(false)}
-          >
-            Apply Now
-          </Link>
+          <div className="flex flex-col gap-4">
+            <Link
+              to="/login"
+              className="text-[17px] text-center font-medium text-[#FBCD15] border border-[#FBCD15] px-6 py-1.75 rounded-full font-body hover:scale-105 transition-all duration-300"
+            >
+              Login
+            </Link>
+            <Link
+              to="/register"
+              className="block text-center px-6 py-2.5 bg-ec-gold text-ec-dark rounded-full font-semibold text-sm"
+              onClick={() => setIsOpen(false)}
+            >
+              Apply Now
+            </Link>
+          </div>
         </div>
       )}
     </nav>

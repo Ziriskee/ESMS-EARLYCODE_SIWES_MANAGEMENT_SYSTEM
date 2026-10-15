@@ -14,8 +14,6 @@ _BACKEND_DIR = _Path(__file__).resolve().parent.parent  # backend/
 load_dotenv(_BACKEND_DIR / ".env")  # backend/.env, if it ever exists
 load_dotenv(_BACKEND_DIR.parent / ".env")  # project-root .env (your current location)
 
-USE_CLOUDINARY = os.environ.get("USE_CLOUDINARY", "true").lower() == "true"
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -48,6 +46,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "cloudinary",
     "cloudinary_storage",
+    "csp",
     # Your app
     "siwes",
 ]
@@ -59,6 +58,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # ← MUST be first
     "django.middleware.security.SecurityMiddleware",
+    "csp.middleware.CSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -140,10 +140,13 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Django 6.x resolves file storage ONLY from STORAGES.
 # (DEFAULT_FILE_STORAGE was removed in Django 5.1 and is ignored.)
 # Replace the STORAGES block with:
+
+USE_CLOUDINARY = os.environ.get("USE_CLOUDINARY", "false").lower() == "true"
+
 STORAGES = {
     "default": {
         "BACKEND": (
-            "cloudinary_storage.storage.MediaCloudinaryStorage"
+            "cloudinary_storage.storage.RawMediaCloudinaryStorage"
             if USE_CLOUDINARY
             else "django.core.files.storage.FileSystemStorage"
         ),
@@ -154,10 +157,10 @@ STORAGES = {
 }
 
 CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": "drzzwy76",
-    "API_KEY": "598266562319256",
-    "API_SECRET": "G6wNshCmupTmWlL6Ck_UJKxPbQg",
-    "RESOURCE_TYPE": "auto",
+    "CLOUD_NAME": os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+    "API_KEY": os.environ.get("CLOUDINARY_API_KEY", ""),
+    "API_SECRET": os.environ.get("CLOUDINARY_API_SECRET", ""),
+    "RESOURCE_TYPE": "raw",  # Allow all file types (images, docs, etc.)
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -216,26 +219,24 @@ CSRF_TRUSTED_ORIGINS = [
 # ============================================================================
 # EMAIL CONFIGURATION
 # ============================================================================
+# Gmail SMTP — works in both dev and production.
+# Credentials read from environment variables (set in .env).
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL",
+    "siwes_earlycode <waziriabdullahi36@gmail.com>",
+)
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
-# Development: prints emails to console (terminal)
-if DEBUG:
-    # locmem stores emails in memory (django.core.mail.outbox) without
-    # printing. The 🟢 dev link in request_magic_link is the only console
-    # output you'll see — which is the working link for manual testing.
+# Development shortcut: set EMAIL_BACKEND=locmem in .env to go back to
+# console-only mode without touching this file.
+if os.environ.get("EMAIL_BACKEND", "").lower() == "locmem":
     EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-else:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-DEFAULT_FROM_EMAIL = "noreply@earlycode.local"
-FRONTEND_URL = "http://localhost:5173"
-
-# Production: uncomment and fill in your SMTP details
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'  # or your SMTP server
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'your-email@gmail.com'
-# EMAIL_HOST_PASSWORD = 'your-app-password'
-# DEFAULT_FROM_EMAIL = 'EarlyCode SIWES <noreply@earlycode.com>'
 
 
 # Security Headers
@@ -252,3 +253,52 @@ CSRF_COOKIE_HTTPONLY = True
 # HSTS (Strict Transport Security)
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# ============================================================================
+# CONTENT SECURITY POLICY (CSP)
+# ============================================================================
+# Updated to django-csp >= 4.0 format
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ("'self'",),
+        "script-src": ("'self'", "'unsafe-inline'"),
+        "style-src": ("'self'", "'unsafe-inline'", "https://fonts.googleapis.com"),
+        "img-src": ("'self'", "data:", "https:"),
+        "font-src": ("'self'", "https://fonts.gstatic.com"),
+        "connect-src": ("'self'",),
+        "frame-ancestors": ("'none'",),
+    }
+}
+
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+# Django ships no LOGGING dict by default, which silently drops app-level
+# logger.info / logger.debug. This wires the siwes logger to the console so
+# backend diagnostics actually appear in the runserver terminal.
+#
+# LOG_MAGIC_LINKS=True  -> DEBUG level, full token diagnostics (DEV ONLY)
+# LOG_MAGIC_LINKS=False -> WARNING level, no tokens anywhere (PRODUCTION)
+LOG_MAGIC_LINKS = os.environ.get("LOG_MAGIC_LINKS", "false").lower() == "true"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {"format": "[{levelname}] {name}: {message}", "style": "{"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "siwes": {
+            "handlers": ["console"],
+            "level": "DEBUG" if LOG_MAGIC_LINKS else "WARNING",
+            "propagate": False,
+        },
+    },
+}
