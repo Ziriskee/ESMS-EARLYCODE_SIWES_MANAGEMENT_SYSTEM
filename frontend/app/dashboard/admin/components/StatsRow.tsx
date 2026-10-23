@@ -1,5 +1,6 @@
-import { FileText, GraduationCap, UserCheck, UserPlus } from "lucide-react";
+import { FileText, GraduationCap,  UserCheck, UserPlus } from "lucide-react";
 import type { AdminDashboardStats } from "../types";
+import { Link } from "react-router-dom";
 
 type StatsRowProps = {
   stats: AdminDashboardStats;
@@ -38,16 +39,16 @@ export function StatsRow({ stats }: StatsRowProps) {
       sub: "Active interns without full docs",
       icon: FileText,
       accent: true,
+      isLink: true,
     },
   ];
   return (
     <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {items.map((item) => {
         const Icon = item.icon;
-        return (
+        const cardContent = (
           <article
-            key={item.label}
-            className="relative overflow-hidden rounded-[24px] border p-5 md:p-6"
+            className={`relative overflow-hidden rounded-[24px] border p-5 md:p-6 ${item.accent ? "cursor-pointer transition-opacity hover:opacity-90" : ""}`}
             style={
               item.accent
                 ? {
@@ -127,6 +128,21 @@ export function StatsRow({ stats }: StatsRowProps) {
             </p>
           </article>
         );
+
+        if (item.isLink) {
+          return (
+            <Link
+              key={item.label}
+              to="/dashboard/admin/interns?missing_docs=true"
+              className="block focus:outline-none focus:ring-2 focus:ring-[var(--gold-500)] rounded-[24px]"
+              aria-label={`View ${item.label}`}
+            >
+              {cardContent}
+            </Link>
+          );
+        }
+
+        return <div key={item.label}>{cardContent}</div>;
       })}
     </section>
   );

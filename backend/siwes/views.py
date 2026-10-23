@@ -972,9 +972,9 @@ def _document_context(intern):
     )
     fonts_dir = fonts_dir_path.as_posix() if fonts_dir_path.exists() else ""
     if fonts_dir:
-        print(f"🔤 Fonts: {sorted(p.name for p in fonts_dir_path.glob('*.ttf'))}")
+        logger.info("PDF Fonts loaded: %s", sorted(p.name for p in fonts_dir_path.glob('*.ttf')))
     else:
-        print("⚠️  fonts folder missing → PDF falls back to Helvetica")
+        logger.warning("PDF fonts folder missing → falling back to Helvetica")
 
     return {
         "issued_date": pretty(timezone.now().date()),
@@ -1580,10 +1580,21 @@ class AdminInternListCreateView(generics.ListAPIView):
             "user", "assigned_instructor__user"
         ).order_by("-created_at")
 
-        # Status filter
-        status_filter = self.request.query_params.get("status", "all")
-        if status_filter in ("pending", "active", "completed"):
-            qs = qs.filter(status=status_filter.upper())
+        # Missing docs filter (overrides status to ACTIVE)
+        missing_docs = self.request.query_params.get("missing_docs")
+        if missing_docs == "true":
+            from django.db.models import Count
+
+            qs = (
+                qs.filter(status=InternProfile.Status.ACTIVE)
+                .annotate(doc_count=Count("documents"))
+                .filter(doc_count__lt=2)
+            )
+        else:
+            # Status filter
+            status_filter = self.request.query_params.get("status", "all")
+            if status_filter in ("pending", "active", "completed"):
+                qs = qs.filter(status=status_filter.upper())
 
         # Campus filter
         campus = self.request.query_params.get("campus")
@@ -1600,7 +1611,6 @@ class AdminInternListCreateView(generics.ListAPIView):
                 | Q(user__last_name__icontains=search)
                 | Q(user__email__icontains=search)
             )
-
         return qs
 
 

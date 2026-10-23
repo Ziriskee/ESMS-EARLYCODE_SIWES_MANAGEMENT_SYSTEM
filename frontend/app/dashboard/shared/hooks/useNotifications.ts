@@ -10,28 +10,49 @@ export type Notification = {
   created_at: string;
 };
 
+type PaginatedResponse = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: Notification[];
+};
+
 export type UseNotificationsResult = {
   notifications: Notification[];
   loading: boolean;
   error: string | null;
+  hasMore: boolean;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  loadMore: () => Promise<void>;
 };
 
 export function useNotifications(): UseNotificationsResult {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
       try {
-        const result = await apiFetch<
-          Notification[] | { results: Notification[] }
-        >("/notifications/");
-        const list = Array.isArray(result) ? result : (result.results ?? []);
-        if (isMounted) setNotifications(list);
+        const result = await apiFetch<Notification[] | PaginatedResponse>(
+          "/notifications/",
+        );
+        if (Array.isArray(result)) {
+          // Fallback if backend ever returns unpaginated
+          if (isMounted) {
+            setNotifications(result);
+            setNextUrl(null);
+          }
+        } else {
+          if (isMounted) {
+            setNotifications(result.results ?? []);
+            setNextUrl(result.next ?? null);
+          }
+        }
       } catch (err) {
         if (isMounted) {
           setError(
@@ -48,15 +69,27 @@ export function useNotifications(): UseNotificationsResult {
     };
   }, []);
 
+  const loadMore = useCallback(async () => {
+    if (!nextUrl || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await apiFetch<PaginatedResponse>(nextUrl);
+      setNotifications((prev) => [...prev, ...(result.results ?? [])]);
+      setNextUrl(result.next ?? null);
+    } catch (err) {
+      console.error("Failed to load more notifications:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextUrl, loadingMore]);
+
   const markAsRead = useCallback(async (id: string) => {
-    // Optimistic update
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
     );
     try {
       await apiFetch(`/notifications/${id}/read/`, { method: "PATCH" });
     } catch {
-      // Revert on failure
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: false } : n)),
       );
@@ -67,7 +100,6 @@ export function useNotifications(): UseNotificationsResult {
     setNotifications((prev) => {
       const previous = prev;
       const next = prev.map((n) => ({ ...n, is_read: true }));
-      // Fire and revert on failure
       apiFetch("/notifications/mark-all-read/", { method: "POST" }).catch(
         () => {
           setNotifications(previous);
@@ -77,5 +109,13 @@ export function useNotifications(): UseNotificationsResult {
     });
   }, []);
 
-  return { notifications, loading, error, markAsRead, markAllAsRead };
+  return {
+    notifications,
+    loading,
+    error,
+    hasMore: nextUrl !== null,
+    markAsRead,
+    markAllAsRead,
+    loadMore,
+  };
 }

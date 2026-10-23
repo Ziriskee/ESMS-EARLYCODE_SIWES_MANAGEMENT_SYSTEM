@@ -12,34 +12,38 @@ type NotificationsFeedProps = {
   notifications: Notification[];
   loading: boolean;
   error: string | null;
+  hasMore: boolean;
   onMarkRead: (id: string) => void;
   onMarkAllRead: () => void;
+  onLoadMore: () => void;
 };
 
 export function NotificationsFeed({
   notifications,
   loading,
   error,
+  hasMore,
   onMarkRead,
   onMarkAllRead,
+  onLoadMore,
 }: NotificationsFeedProps) {
-const [filter, setFilter] = useState<Filter>("all");
-const [typeFilter, setTypeFilter] = useState<NotificationGroup>("all");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [typeFilter, setTypeFilter] = useState<NotificationGroup>("all");
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.is_read).length,
     [notifications],
   );
-const visible = useMemo(() => {
-  let list =
-    filter === "unread"
-      ? notifications.filter((n) => !n.is_read)
-      : notifications;
-  if (typeFilter !== "all") {
-    const allowed = NOTIFICATION_GROUPS[typeFilter];
-    list = list.filter((n) => allowed.includes(n.type as NotificationType));
-  }
-  return list;
-}, [notifications, filter, typeFilter]);
+  const visible = useMemo(() => {
+    let list =
+      filter === "unread"
+        ? notifications.filter((n) => !n.is_read)
+        : notifications;
+    if (typeFilter !== "all") {
+      const allowed = NOTIFICATION_GROUPS[typeFilter];
+      list = list.filter((n) => allowed.includes(n.type as NotificationType));
+    }
+    return list;
+  }, [notifications, filter, typeFilter]);
   const countLabel =
     unreadCount === 0
       ? "No unread updates"
@@ -88,12 +92,7 @@ const visible = useMemo(() => {
               className="appearance-none h-9 pl-4 pr-10 rounded-full text-[13px] font-semibold border border-[var(--line)] bg-[var(--surface2)] text-[var(--text)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--gold-500)]"
             >
               {(
-                [
-                  "all",
-                  "tasks",
-                  "messages",
-                  "system",
-                ] as NotificationGroup[]
+                ["all", "tasks", "messages", "system"] as NotificationGroup[]
               ).map((g) => (
                 <option key={g} value={g}>
                   {GROUP_LABELS[g]}
@@ -170,6 +169,23 @@ const visible = useMemo(() => {
               onMarkRead={onMarkRead}
             />
           ))}
+          {hasMore && (
+            <div className="mt-4 pb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                className="h-9 px-5 rounded-full text-[13px] font-semibold transition-colors flex items-center gap-2"
+                style={{
+                  backgroundColor: "var(--surface2)",
+                  color: "var(--text)",
+                  border: "1px solid var(--line)",
+                }}
+              >
+                <ChevronDown size={16} strokeWidth={2} />
+                <span>Load older notifications</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </Card>

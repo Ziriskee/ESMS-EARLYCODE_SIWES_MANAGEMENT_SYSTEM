@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, ArrowLeft, Send } from "lucide-react";
+import { Plus, ArrowLeft, Send, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ProfileAvatar } from "../../ui/ProfileAvatar";
 import { Modal } from "../../ui/Modal";
@@ -381,6 +381,13 @@ function NewChatModal({
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredUsers = users.filter((u) =>
+    `${u.first_name} ${u.last_name}`
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase()),
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -416,6 +423,23 @@ function NewChatModal({
   return (
     <Modal open={true} onClose={onClose} title="New Message" size="sm">
       <div className="space-y-2 max-h-80 overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-[var(--surface)] pb-3 pt-1">
+          <div className="relative">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: "var(--muted)" }}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search users..."
+              className="w-full h-9 pl-9 pr-3 rounded-full text-[13px] border border-[var(--line)] bg-[var(--surface2)] text-[var(--text)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-500)]"
+            />
+          </div>
+        </div>
+
         {loading && (
           <p className="text-[13px] text-[var(--muted)] p-4 text-center">
             Loading users...
@@ -429,12 +453,14 @@ function NewChatModal({
             {error}
           </p>
         )}
-        {!loading && !error && users.length === 0 && (
+        {!loading && !error && filteredUsers.length === 0 && (
           <p className="text-[13px] text-[var(--muted)] p-4 text-center">
-            No users available to message.
+            {users.length === 0
+              ? "No users available to message."
+              : "No users match your search."}
           </p>
         )}
-        {users.map((u) => (
+        {filteredUsers.map((u) => (
           <button
             key={u.id}
             onClick={() => handlePick(u.id)}

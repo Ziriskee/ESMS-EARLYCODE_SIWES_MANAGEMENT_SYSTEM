@@ -243,6 +243,11 @@ if os.environ.get("EMAIL_BACKEND", "").lower() == "locmem":
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"  # Prevents clickjacking
+SECURE_SSL_REDIRECT = not DEBUG  # Force HTTPS in production
+SECURE_CROSS_ORIGIN_OPENER_POLICY = (
+    "same-origin"  # Prevents cross-origin window manipulation
+)
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"  # Prevents leaking full URLs
 
 # Cookie Security (Crucial for our HttpOnly JWT)
 SESSION_COOKIE_SECURE = not DEBUG

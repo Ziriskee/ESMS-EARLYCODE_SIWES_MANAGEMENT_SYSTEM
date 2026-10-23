@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useCampusFilter } from "@/contexts/useCampusFilter";
 import { useAllInterns } from "../hooks/useAllInterns";
 import { useInternSubmission } from "../hooks/useInternSubmission";
@@ -15,14 +15,20 @@ import { apiFetch } from "@/lib/api";
 import { ConfirmModal } from "../../shared/ui/ConfirmModal";
 import { EditSubmissionModal } from "../components/EditSubmissionModal";
 import { InternDocumentsModal } from "../components/InternDocumentsModal";
+import { useSearchParams } from "react-router-dom";
 
 export default function AdminAllInternsPage() {
   const { campus } = useCampusFilter();
-  const [filter, setFilter] = useState<AllInternFilter>("active");
-    const [deactivateIntern, setDeactivateIntern] =
-      useState<AllInternSummary | null>(null);
-    const [deactivating, setDeactivating] = useState(false);
-    const [deactivateError, setDeactivateError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isMissingDocs = searchParams.get("missing_docs") === "true";
+
+  const [filter, setFilter] = useState<AllInternFilter>(
+    isMissingDocs ? "active" : "active",
+  );
+  const [deactivateIntern, setDeactivateIntern] =
+    useState<AllInternSummary | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -33,7 +39,7 @@ export default function AdminAllInternsPage() {
   }, [search]);
 
   const { interns, loading, error, count, page, totalPages, setPage, refetch } =
-    useAllInterns(filter, debouncedSearch, campus);
+    useAllInterns(filter, debouncedSearch, campus, isMissingDocs);
 
   // Review modal state
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,9 +61,9 @@ export default function AdminAllInternsPage() {
   const [assignIntern, setAssignIntern] = useState<AllInternSummary | null>(
     null,
   );
-  
-    const [documentsIntern, setDocumentsIntern] =
-      useState<AllInternSummary | null>(null);
+
+  const [documentsIntern, setDocumentsIntern] =
+    useState<AllInternSummary | null>(null);
 
   const handleRowClick = (intern: AllInternSummary) => {
     setSelectedId(String(intern.id));
@@ -73,6 +79,40 @@ export default function AdminAllInternsPage() {
   return (
     <>
       <div className="space-y-4 sm:space-y-5">
+        {isMissingDocs && (
+          <div
+            className="flex items-center justify-between gap-3 rounded-xl border p-4"
+            style={{
+              backgroundColor: "var(--surface2)",
+              borderColor: "var(--line)",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: "var(--gold-500)" }}
+              />
+              <p
+                className="text-[13px] font-medium"
+                style={{ color: "var(--text)" }}
+              >
+                Showing active interns missing documents
+              </p>
+            </div>
+            <button
+              onClick={() => setSearchParams({})}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: "var(--surface)",
+                color: "var(--muted)",
+                border: "1px solid var(--line)",
+              }}
+            >
+              <X size={14} />
+              Clear filter
+            </button>
+          </div>
+        )}
         {/* Search */}
         <div className="relative">
           <Search

@@ -21,6 +21,7 @@ export function useAllInterns(
   status: AllInternStatus,
   search: string,
   campus: string,
+  missingDocs: boolean = false,
 ): UseAllInternsResult {
   const [interns, setInterns] = useState<AllInternSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,13 +30,20 @@ export function useAllInterns(
   const [page, setPage] = useState(1);
 
   // Reset page to 1 when filters change — during render, not in an effect.
-  const [prevFilters, setPrevFilters] = useState({ status, search, campus });
+  // Reset page to 1 when filters change — during render, not in an effect.
+  const [prevFilters, setPrevFilters] = useState({
+    status,
+    search,
+    campus,
+    missingDocs,
+  });
   if (
     status !== prevFilters.status ||
     search !== prevFilters.search ||
-    campus !== prevFilters.campus
+    campus !== prevFilters.campus ||
+    missingDocs !== prevFilters.missingDocs
   ) {
-    setPrevFilters({ status, search, campus });
+    setPrevFilters({ status, search, campus, missingDocs });
     setPage(1);
   }
 
@@ -50,6 +58,7 @@ export function useAllInterns(
         if (status !== "all") params.set("status", status);
         if (search.trim()) params.set("search", search.trim());
         if (campus !== "all") params.set("campus", campus);
+        if (missingDocs) params.set("missing_docs", "true");
         params.set("page", String(page));
 
         const data = await apiFetch<AllInternsResponse>(
@@ -72,7 +81,7 @@ export function useAllInterns(
     return () => {
       isMounted = false;
     };
-  }, [status, search, campus, page]);
+  }, [status, search, campus, page, missingDocs]);
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
@@ -82,6 +91,7 @@ export function useAllInterns(
     if (status !== "all") params.set("status", status);
     if (search.trim()) params.set("search", search.trim());
     if (campus !== "all") params.set("campus", campus);
+    if (missingDocs) params.set("missing_docs", "true");
     params.set("page", String(page));
     try {
       const data = await apiFetch<AllInternsResponse>(
