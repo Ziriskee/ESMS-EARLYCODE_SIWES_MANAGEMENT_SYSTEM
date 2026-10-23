@@ -21,11 +21,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # 1. SECURITY (CHANGE THESE FOR PRODUCTION)
 # ═══════════════════════════════════════════════════════════════
 
-# Get from environment variable, fallback to dev key
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-me-in-production")
+# Fail-closed security: require explicit env vars in production
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-# True in development, False in production
-DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    if os.environ.get("DEBUG", "True").lower() == "true":
+        SECRET_KEY = "dev-secret-key-change-me-in-production"
+    else:
+        raise ValueError(
+            "SECRET_KEY environment variable is strictly required in production"
+        )
 
 # Who can access your site
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
@@ -58,6 +64,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # ← MUST be first
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # ← ADD (after SecurityMiddleware)
     "csp.middleware.CSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -130,17 +137,11 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# ── Cloudinary media storage ─────────────────────────────────
-# All FileField/ImageField uploads (documents, task attachments,
-# profile pictures) go to Cloudinary instead of local disk.
+# ── Cloudinary & Static media storage ────────────────────────
 # Django 6.x resolves file storage ONLY from STORAGES.
-# (DEFAULT_FILE_STORAGE was removed in Django 5.1 and is ignored.)
-# Replace the STORAGES block with:
-
 USE_CLOUDINARY = os.environ.get("USE_CLOUDINARY", "false").lower() == "true"
 
 STORAGES = {
@@ -152,7 +153,7 @@ STORAGES = {
         ),
     },
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 
@@ -210,10 +211,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:4173",  # ← ADD THIS
-    "http://127.0.0.1:4173",  # ← ADD THIS
+    origin.strip()
+    for origin in os.environ.get(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173",
+    ).split(",")
 ]
 
 # ============================================================================
