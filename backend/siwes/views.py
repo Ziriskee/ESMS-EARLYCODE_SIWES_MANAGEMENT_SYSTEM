@@ -74,7 +74,7 @@ def temp_create_admin(request):
     """TEMPORARY: Creates an admin user. DELETE THIS ENDPOINT IMMEDIATELY AFTER USE."""
     secret = request.GET.get("secret")
     # ⚠️ CHANGE THIS SECRET TO SOMETHING UNIQUE BEFORE PUSHING
-    if secret != "SUPER_SECRET_ADMIN_SETUP_84729":
+    if secret != "Ziriskee01":
         return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
     if User.objects.filter(role=User.Role.ADMIN, is_active=True).exists():
@@ -82,8 +82,8 @@ def temp_create_admin(request):
 
     try:
         admin = User.objects.create_superuser(
-            email="admin@earlycode.com",
-            password="TempAdminPass123!",  # ⚠️ CHANGE THIS PASSWORD
+            email="hp@gmail.com",
+            password="abdullahi123",  # ⚠️ CHANGE THIS PASSWORD
             first_name="System",
             last_name="Admin",
             role=User.Role.ADMIN,
