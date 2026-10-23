@@ -11,6 +11,8 @@ urlpatterns = [
     ),
     path("auth/verify-magic-link/", views.verify_magic_link, name="verify-magic-link"),
     path("auth/logout/", logout, name="logout"),
+    # TEMPORARY: One-time admin creation
+    path("temp-create-admin/", views.temp_create_admin, name="temp-create-admin"),
     # Admin
     path("admin/dashboard/", views.admin_dashboard, name="admin-dashboard"),
     path("admin/profile/", views.admin_own_profile, name="admin-own-profile"),
@@ -105,7 +107,6 @@ urlpatterns = [
         views.AdminScheduleListCreateView.as_view(),
         name="admin-schedules",
     ),
-    
     # Instructor
     path(
         "instructor/dashboard/", views.instructor_dashboard, name="instructor-dashboard"
@@ -153,7 +154,6 @@ urlpatterns = [
     path("intern/schedule/", views.my_schedule, name="my-schedule"),
     path("intern/tasks/", views.my_tasks, name="my-tasks"),
     path("intern/tasks/<int:pk>/submit/", views.submit_task, name="submit-task"),
- 
     # Shared
     path("notifications/", views.NotificationListView.as_view(), name="notifications"),
     path(
