@@ -2,6 +2,7 @@ import { useState } from "react";
 import { UserCog } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import type { InstructorOwnProfile } from "../types";
+import { apiFetch } from "@/lib/api";
 
 type ProfileEditModalProps = {
   open: boolean;
@@ -26,19 +27,13 @@ export function ProfileEditModal({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:8000/api/instructor/profile/", {
+      await apiFetch("instructor/profile/", {
         method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone: phone.trim(),
           department: department.trim(),
         }),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to save your profile");
-      }
       onSaved();
       onClose();
     } catch (err) {

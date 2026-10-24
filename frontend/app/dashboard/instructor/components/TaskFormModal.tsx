@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ListChecks } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
+import { apiFetch } from "@/lib/api";
 
 type TaskFormModalProps = {
   open: boolean;
@@ -35,17 +36,11 @@ export function TaskFormModal({ open, onClose, onSaved }: TaskFormModalProps) {
         });
       }
 
-      const res = await fetch("http://localhost:8000/api/instructor/tasks/", {
+      await apiFetch("/instructor/tasks/", {
         method: "POST",
-        credentials: "include",
         body: formData,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(
-          data?.error || data?.title?.[0] || "Failed to create task",
-        );
-      }
+
       setTitle("");
       setDescription("");
       setDueDate("");

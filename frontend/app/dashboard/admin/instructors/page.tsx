@@ -9,6 +9,7 @@ import { RemoveInstructorModal } from "../components/RemoveInstructorModal";
 import { ConfirmModal } from "../../shared/ui/ConfirmModal";
 import type { InstructorSummary } from "../types";
 import { useCampusFilter } from "@/contexts/useCampusFilter";
+import { apiFetch } from "@/lib/api";
 
 type ModalState =
   | { kind: "closed" }
@@ -38,17 +39,9 @@ export default function AdminInstructorsPage() {
     setBusy(true);
     setConfirmError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/admin/instructors/${instructor.id}/${endpoint}/`,
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to update instructor");
-      }
+      await apiFetch(`admin/instructors/${instructor.id}/${endpoint}/`, {
+        method: "POST",
+      });
       await refetch();
       closeModal();
     } catch (err) {

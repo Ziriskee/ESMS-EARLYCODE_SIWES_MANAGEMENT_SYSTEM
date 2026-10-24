@@ -3,6 +3,7 @@ import { AlertTriangle, User } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { StatusChip } from "../../shared/data/StatusChip";
 import type { InternSubmission } from "../types";
+import { apiFetch } from "@/lib/api";
 
 type ReviewModalProps = {
   open: boolean;
@@ -87,19 +88,10 @@ export function ReviewModal({
     setRejecting(true);
     setRejectError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/admin/interns/${submission.id}/reject/`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason }),
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to reject");
-      }
+      await apiFetch(`/admin/interns/${submission.id}/reject/`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
       onRejected();
       handleClose();
     } catch (err) {

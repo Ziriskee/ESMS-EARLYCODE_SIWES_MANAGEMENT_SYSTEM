@@ -6,6 +6,7 @@ import { PlacementStep } from "./PlacementStep";
 import { DocumentsStep } from "./DocumentsStep";
 import type { InternSubmission, ScheduleEntry } from "../../types";
 import { InstructorStep } from "./InstructorStep";
+import { ApiError, apiFetch } from "@/lib/api";
 
 type AcceptWizardProps = {
   open: boolean;
@@ -93,24 +94,17 @@ export function AcceptWizard({
 
     try {
       // 1. Accept — flips status to ACTIVE.
-      const acceptRes = await fetch(
-        `http://localhost:8000/api/admin/interns/${submission.id}/accept/`,
-        {
+      try {
+        await apiFetch(`admin/interns/${submission.id}/accept/`, {
           method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-      const acceptData = await acceptRes.json().catch(() => null);
-      if (!acceptRes.ok) {
+        });
+      } catch (err) {
         // Treat "already active" as a non-fatal condition.
         const alreadyActive =
-          acceptRes.status === 400 &&
-          typeof acceptData?.error === "string" &&
-          acceptData.error.toLowerCase().includes("already active");
-        if (!alreadyActive) {
-          throw new Error(acceptData?.error || "Failed to accept the intern");
-        }
+          err instanceof ApiError &&
+          err.status === 400 &&
+          err.message.toLowerCase().includes("already active");
+        if (!alreadyActive) throw err;
       }
 
       // 2. Configure — dates, schedule, instructor.
@@ -126,19 +120,10 @@ export function AcceptWizard({
         configPayload.instructor_id = instructorId;
       }
 
-      const configRes = await fetch(
-        `http://localhost:8000/api/admin/interns/${submission.id}/configure/`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(configPayload),
-        },
-      );
-      const configData = await configRes.json().catch(() => null);
-      if (!configRes.ok) {
-        throw new Error(configData?.error || "Failed to save placement config");
-      }
+      await apiFetch(`admin/interns/${submission.id}/configure/`, {
+        method: "POST",
+        body: JSON.stringify(configPayload),
+      });
 
       // 3. Documents — only if any file was provided.
       if (codeOfConduct || acceptanceLetter) {
@@ -150,33 +135,18 @@ export function AcceptWizard({
           formData.append("acceptance_letter", acceptanceLetter);
         }
 
-        const uploadRes = await fetch(
-          `http://localhost:8000/api/admin/interns/${submission.id}/documents/`,
-          {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          },
-        );
-        const uploadData = await uploadRes.json().catch(() => null);
-        if (!uploadRes.ok) {
-          throw new Error(uploadData?.error || "Failed to upload documents");
-        }
-      }
-      // ✅ AUTO-GENERATE MISSING DOCUMENTS
-      // If the admin didn't manually upload an acceptance letter or code of conduct,
-      // generate them automatically using the intern's submitted data.
-      await fetch(
-        `http://localhost:8000/api/admin/interns/${submission.id}/documents/generate/`,
-        {
+        await apiFetch(`admin/interns/${submission.id}/documents/`, {
           method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ only_missing: true }),
-        }
-      ).catch(() => null); // Fail silently if PDF generation fails
+          body: formData,
+        });
+      }
 
-      
+      // ✅ AUTO-GENERATE MISSING DOCUMENTS (fail silently)
+      await apiFetch(`admin/interns/${submission.id}/documents/generate/`, {
+        method: "POST",
+        body: JSON.stringify({ only_missing: true }),
+      }).catch(() => null);
+
       // Success: notify parent + close directly (not via handleClose,
       // which would no-op while `submitting` is still true).
       onCompleted();

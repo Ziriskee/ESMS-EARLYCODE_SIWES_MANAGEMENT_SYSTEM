@@ -71,19 +71,10 @@ export function AssignTaskModal({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/instructor/tasks/${task.id}/assign/`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intern_ids: selected }),
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to assign task");
-      }
+      await apiFetch(`instructor/tasks/${task.id}/assign/`, {
+        method: "POST",
+        body: JSON.stringify({ intern_ids: selected }),
+      });
       onAssigned();
       onClose();
     } catch (err) {

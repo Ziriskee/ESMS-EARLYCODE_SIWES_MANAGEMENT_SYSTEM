@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import type { TaskAssignmentEntry } from "../types";
+import { apiFetch } from "@/lib/api";
 
 type TaskReviewModalProps = {
   open: boolean;
@@ -29,19 +30,10 @@ export function TaskReviewModal({
     setSaving(decision);
     setError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/instructor/assignments/${assignment.id}/review/`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ feedback: text, status: decision }),
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to review task");
-      }
+      await apiFetch(`/instructor/assignments/${assignment.id}/review/`, {
+        method: "PATCH",
+        body: JSON.stringify({ feedback: text, status: decision }),
+      });
       onReviewed();
       onClose();
     } catch (err) {

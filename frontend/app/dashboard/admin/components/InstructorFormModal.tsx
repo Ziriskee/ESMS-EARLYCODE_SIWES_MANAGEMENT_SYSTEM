@@ -2,6 +2,7 @@ import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import type { InstructorSummary } from "../types";
+import { apiFetch } from "@/lib/api";
 
 type InstructorFormModalProps = {
   open: boolean;
@@ -65,53 +66,28 @@ export function InstructorFormModal({
 
     try {
       if (isEdit && instructor) {
-        const res = await fetch(
-          `http://localhost:8000/api/admin/instructors/${instructor.id}/`,
-          {
-            method: "PATCH",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              first_name: form.first_name,
-              last_name: form.last_name,
-              phone: form.phone,
-              department: form.department,
-                campus: form.campus,
-            }),
-          },
-        );
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          throw new Error(
-            data?.error || data?.detail || "Failed to update instructor",
-          );
-        }
+        await apiFetch(`admin/instructors/${instructor.id}/`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            first_name: form.first_name,
+            last_name: form.last_name,
+            phone: form.phone,
+            department: form.department,
+            campus: form.campus,
+          }),
+        });
       } else {
-        const res = await fetch(
-          "http://localhost:8000/api/admin/instructors/create/",
-          {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: form.email,
-              first_name: form.first_name,
-              last_name: form.last_name,
-              phone: form.phone,
-              department: form.department,
-                campus: form.campus,
-            }),
-          },
-        );
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          const firstError =
-            data?.email?.[0] ||
-            data?.error ||
-            data?.detail ||
-            "Failed to create instructor";
-          throw new Error(firstError);
-        }
+        await apiFetch("admin/instructors/create/", {
+          method: "POST",
+          body: JSON.stringify({
+            email: form.email,
+            first_name: form.first_name,
+            last_name: form.last_name,
+            phone: form.phone,
+            department: form.department,
+            campus: form.campus,
+          }),
+        });
       }
       onSaved();
       onClose();

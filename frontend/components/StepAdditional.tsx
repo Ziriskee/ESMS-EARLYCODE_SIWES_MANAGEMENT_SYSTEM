@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ErrorMessage, useFormikContext } from "formik";
 import MultiSelect from "./MultiSelect";
+import { apiFetch } from "@/lib/api";
 
 interface Course {
   id: string;
@@ -10,8 +11,7 @@ interface Course {
   is_active: boolean;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+
 
 export default function StepAdditional() {
   const { values, errors, touched, setFieldValue } = useFormikContext<{
@@ -29,10 +29,11 @@ export default function StepAdditional() {
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/courses/`);
-        if (!response.ok) throw new Error("Could not load courses.");
-        const data = await response.json();
-
+        const data = await apiFetch<Course[] | { results?: Course[] }>(
+          "courses/",
+        ).catch(() => {
+          throw new Error("Could not load courses.");
+        });
         const courseList: Course[] = Array.isArray(data)
           ? data
           : data.results || [];

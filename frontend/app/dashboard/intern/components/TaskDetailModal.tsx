@@ -3,6 +3,7 @@ import { ListChecks } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { StatusChip } from "../../shared/data/StatusChip";
 import type { InternTaskAssignment } from "../hooks/useMyTasks";
+import { apiFetch } from "@/lib/api";
 
 type TaskDetailModalProps = {
   open: boolean;
@@ -72,18 +73,10 @@ export function TaskDetailModal({
       const formData = new FormData();
       if (file) formData.append("submission_file", file);
 
-      const res = await fetch(
-        `http://localhost:8000/api/intern/tasks/${assignment.id}/submit/`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          body: formData,
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to submit task");
-      }
+      await apiFetch(`/intern/tasks/${assignment.id}/submit/`, {
+        method: "PATCH",
+        body: formData,
+      });
       setFile(null);
       onSubmitted();
       onClose();

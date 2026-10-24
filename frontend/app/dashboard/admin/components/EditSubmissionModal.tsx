@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PencilLine } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import type { InternSubmission } from "../types";
+import { apiFetch } from "@/lib/api";
 
 type EditSubmissionModalProps = {
   open: boolean;
@@ -58,30 +59,17 @@ export function EditSubmissionModal({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/admin/interns/${submission.id}/submission/`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preferred_campus: form.preferred_campus,
-            school_start_date: form.school_start_date || null,
-            school_end_date: form.school_end_date || null,
-            internship_duration: form.internship_duration,
-            other_duration: form.other_duration,
-            why_intern: form.why_intern,
-          }),
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const firstError =
-          data?.error ||
-          data?.non_field_errors?.[0] ||
-          "Failed to update submission";
-        throw new Error(firstError);
-      }
+      await apiFetch(`admin/interns/${submission.id}/submission/`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          preferred_campus: form.preferred_campus,
+          school_start_date: form.school_start_date || null,
+          school_end_date: form.school_end_date || null,
+          internship_duration: form.internship_duration,
+          other_duration: form.other_duration,
+          why_intern: form.why_intern,
+        }),
+      });
       onSaved();
       onClose();
     } catch (err) {

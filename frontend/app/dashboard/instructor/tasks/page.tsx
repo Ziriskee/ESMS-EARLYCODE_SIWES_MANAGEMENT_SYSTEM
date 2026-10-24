@@ -7,6 +7,7 @@ import { TaskDetailModal } from "../components/TaskDetailModal";
 import { TaskReviewModal } from "../components/TaskReviewModal";
 import { ConfirmModal } from "../../shared/ui/ConfirmModal";
 import type { InstructorTask, TaskAssignmentEntry } from "../types";
+import { apiFetch } from "@/lib/api";
 
 export default function InstructorTasksPage() {
   const { tasks, loading, error, refetch } = useInstructorTasks();
@@ -30,14 +31,9 @@ export default function InstructorTasksPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/instructor/tasks/${deleteTask.id}/`,
-        { method: "DELETE", credentials: "include" },
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to delete task");
-      }
+      await apiFetch(`/instructor/tasks/${deleteTask.id}/`, {
+        method: "DELETE",
+      });
       await refetch();
       setDeleteTask(null);
     } catch (err) {

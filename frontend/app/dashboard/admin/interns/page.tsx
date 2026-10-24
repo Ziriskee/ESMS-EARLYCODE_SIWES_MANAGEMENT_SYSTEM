@@ -221,18 +221,9 @@ export default function AdminAllInternsPage() {
           setDeactivating(true);
           setDeactivateError(null);
           try {
-            const res = await fetch(
-              `http://localhost:8000/api/admin/interns/${deactivateIntern.id}/reject/`,
-              {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-              },
-            );
-            const data = await res.json().catch(() => null);
-            if (!res.ok) {
-              throw new Error(data?.error || "Failed to deactivate");
-            }
+            await apiFetch(`admin/interns/${deactivateIntern.id}/reject/`, {
+              method: "POST",
+            });
             await refetch();
             setDeactivateIntern(null);
           } catch (err) {

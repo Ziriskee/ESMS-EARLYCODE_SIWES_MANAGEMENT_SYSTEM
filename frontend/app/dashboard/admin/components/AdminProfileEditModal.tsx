@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { UserCog } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
+import { apiFetch } from "@/lib/api";
 
 type AdminProfileEditModalProps = {
   open: boolean;
@@ -26,19 +27,13 @@ export function AdminProfileEditModal({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:8000/api/admin/profile/", {
+      await apiFetch("admin/profile/", {
         method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone: phone.trim(),
           campus: campus.trim(),
         }),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to save your profile");
-      }
       onSaved();
       onClose();
     } catch (err) {

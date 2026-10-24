@@ -15,11 +15,14 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const isFormData = options.body instanceof FormData;
+  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+
+  const response = await fetch(url, {
     ...options,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(options.headers || {}),
     },
   });
@@ -31,14 +34,25 @@ export async function apiFetch<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      data?.detail ||
-      data?.message ||
-      data?.error ||
-      JSON.stringify(data) ||
-      "Request failed";
+    // Handles ALL your old error shapes: detail, message, error,
+    // non_field_errors[0], and field errors like email[0] / title[0]
+    let message: string | null =
+      data?.detail || data?.message || data?.error || null;
 
-    throw new ApiError(response.status, message);
+    if (!message && typeof data === "object" && data !== null) {
+      for (const value of Object.values(data)) {
+        if (Array.isArray(value) && typeof value[0] === "string") {
+          message = value[0];
+          break;
+        }
+        if (typeof value === "string") {
+          message = value;
+          break;
+        }
+      }
+    }
+
+    throw new ApiError(response.status, message || "Request failed");
   }
 
   return data as T;

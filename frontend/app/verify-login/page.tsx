@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -11,17 +12,11 @@ export default function VerifyLoginPage() {
     let isMounted = true;
     const verify = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/auth/verify-magic-link/?token=${encodeURIComponent(token)}`,
-          { credentials: "include" },
+        await apiFetch(
+          `auth/verify-magic-link/?token=${encodeURIComponent(token)}`,
         );
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          throw new Error(data?.error || "Invalid or expired link");
-        }
         // Hard-navigate: the session cookie is brand new, so the whole
-        // app must re-bootstrap from it — identical to the manual
-        // refresh that was previously required. No SPA state survives.
+        // app must re-bootstrap from it. No SPA state survives.
         window.location.replace("/dashboard");
       } catch (err) {
         if (!isMounted) return;

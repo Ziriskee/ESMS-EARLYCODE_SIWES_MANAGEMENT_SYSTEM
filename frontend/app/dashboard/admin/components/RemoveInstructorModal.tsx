@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import type { InstructorSummary } from "../types";
+import { apiFetch } from "@/lib/api";
 
 type RemoveInstructorModalProps = {
   open: boolean;
@@ -24,17 +25,9 @@ export function RemoveInstructorModal({
     setRemoving(true);
     setError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/admin/instructors/${instructor.id}/remove/`,
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to remove instructor");
-      }
+      await apiFetch(`admin/instructors/${instructor.id}/remove/`, {
+        method: "POST",
+      });
       onRemoved();
       onClose();
     } catch (err) {

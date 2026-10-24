@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/api";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -14,16 +15,13 @@ export default function LoginPage() {
     setStatus("loading");
 
     try {
-      const response = await fetch(
-        "http://localhost:8000/api/auth/request-magic-link/",
+      const data = await apiFetch<{ message?: string }>(
+        "auth/request-magic-link/",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email }),
         },
       );
-
-      const data = await response.json();
 
       setStatus("sent");
       setMessage(data.message || "Check your email for a login link.");

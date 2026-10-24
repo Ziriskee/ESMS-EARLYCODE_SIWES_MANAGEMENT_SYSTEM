@@ -5,6 +5,7 @@ import StepPersonal from "./StepPersonal";
 import StepSchool from "./StepSchool";
 import StepAdditional from "./StepAdditional";
 import { useNavigate } from "react-router-dom";
+import { apiFetch } from "@/lib/api";
 
 export interface FormValues {
   // Step 1: Personal
@@ -243,25 +244,10 @@ export default function RegisterForm() {
         chosen_courses: values.chosenCourses,
       };
 
-      const response = await fetch("http://localhost:8000/api/auth/register/", {
+      await apiFetch<{ success: boolean; message: string }>("auth/register/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(payload),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errorMsg =
-          data.detail ||
-          data.message ||
-          (typeof data === "object"
-            ? JSON.stringify(data)
-            : "Registration failed");
-        throw new Error(errorMsg);
-      }
 
       setSubmitStatus({
         type: "success",

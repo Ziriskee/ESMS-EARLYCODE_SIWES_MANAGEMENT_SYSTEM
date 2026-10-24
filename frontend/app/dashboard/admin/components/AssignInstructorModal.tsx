@@ -63,19 +63,10 @@ export function AssignInstructorModal({
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/admin/interns/${intern.id}/assign-instructor/`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instructor_id: selectedId }),
-        },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to assign instructor");
-      }
+      await apiFetch(`admin/interns/${intern.id}/assign-instructor/`, {
+        method: "POST",
+        body: JSON.stringify({ instructor_id: selectedId }),
+      });
       onAssigned();
       onClose();
     } catch (err) {
