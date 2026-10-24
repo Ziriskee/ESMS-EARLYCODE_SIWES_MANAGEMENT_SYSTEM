@@ -277,7 +277,7 @@ def verify_magic_link(request):
         max_age=settings.SESSION_COOKIE_MAX_AGE,
         httponly=True,
         secure=not settings.DEBUG,
-        samesite="Lax",
+        samesite="None" if not settings.DEBUG else "Lax",
         path="/",
     )
     return response
@@ -355,7 +355,8 @@ def logout(request):
     response.delete_cookie(
         key=settings.ACCESS_COOKIE_NAME,
         path="/",
-        samesite="Lax",
+        samesite="None" if not settings.DEBUG else "Lax",
+        secure=not settings.DEBUG,
     )
 
     return response
