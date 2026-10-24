@@ -11,9 +11,11 @@ from dotenv import load_dotenv
 from pathlib import Path as _Path
 
 _BACKEND_DIR = _Path(__file__).resolve().parent.parent  # backend/
-load_dotenv(_BACKEND_DIR / ".env")  # backend/.env, if it ever exists
-load_dotenv(_BACKEND_DIR.parent / ".env")  # project-root .env (your current location)
+load_dotenv(_BACKEND_DIR / ".env", override=True)
+load_dotenv(_BACKEND_DIR.parent / ".env", override=True)
 
+print(f"🚨 DEBUG CHECK: LOG_MAGIC_LINKS = {os.environ.get('LOG_MAGIC_LINKS')}")
+print(f"🚨 DEBUG CHECK: DEBUG = {os.environ.get('DEBUG')}" )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -224,15 +226,15 @@ CSRF_TRUSTED_ORIGINS = [
 # Gmail SMTP — works in both dev and production.
 # Credentials read from environment variables (set in .env).
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_TIMEOUT = 10  # ← ADD: Fail fast if Render blocks SMTP (prevents worker timeout)
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False").lower() == "true"
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = 10  # Fail fast to prevent Gunicorn SIGKILL
 DEFAULT_FROM_EMAIL = os.environ.get(
-    "DEFAULT_FROM_EMAIL",
-    "siwes_earlycode <waziriabdullahi36@gmail.com>",
+    "DEFAULT_FROM_EMAIL", "SIWES EarlyCode <noreply@localhost>"
 )
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
@@ -310,3 +312,8 @@ LOGGING = {
         },
     },
 }
+
+
+print(
+    f"--- DEBUG={DEBUG} | SSL_REDIRECT={SECURE_SSL_REDIRECT} | CORS={CORS_ALLOWED_ORIGINS}"
+)
