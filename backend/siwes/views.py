@@ -1,4 +1,5 @@
 import logging
+import os
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.mail import send_mail
@@ -279,6 +280,7 @@ def verify_magic_link(request):
         secure=not settings.DEBUG,
         samesite="Lax",
         path="/",
+        domain=os.environ.get("SESSION_COOKIE_DOMAIN", None),  # ← ADD THIS LINE
     )
     return response
 
@@ -356,6 +358,8 @@ def logout(request):
         key=settings.ACCESS_COOKIE_NAME,
         path="/",
         samesite="Lax",
+        secure=not settings.DEBUG,
+        domain=os.environ.get("SESSION_COOKIE_DOMAIN", None),  # ← ADD THIS LINE
     )
 
     return response
