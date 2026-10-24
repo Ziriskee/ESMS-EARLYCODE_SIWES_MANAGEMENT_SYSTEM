@@ -67,46 +67,6 @@ signer = TimestampSigner()
 logger = logging.getLogger(__name__)
 
 
-# ── TEMPORARY: One-time admin creation endpoint ───────────────
-@api_view(["GET"])
-@permission_classes([permissions.AllowAny])
-def temp_create_admin(request):
-    """TEMPORARY: Creates an admin user. DELETE THIS ENDPOINT IMMEDIATELY AFTER USE."""
-    secret = request.GET.get("secret")
-    # ⚠️ CHANGE THIS SECRET TO SOMETHING UNIQUE BEFORE PUSHING
-    if secret != "Ziriskee01":
-        return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    if User.objects.filter(role=User.Role.ADMIN, is_active=True).exists():
-        return Response({"message": "Admin user already exists."})
-
-    try:
-        admin = User.objects.create_superuser(
-            username="hp@gmail.com",
-            email="hp@gmail.com",
-            password="abdullahi123",  # ⚠️ CHANGE THIS PASSWORD
-            first_name="System",
-            last_name="Admin",
-            role=User.Role.ADMIN,
-        )
-        from .models import AdminProfile
-
-        AdminProfile.objects.get_or_create(user=admin)
-        return Response(
-            {
-                "success": True,
-                "message": "Admin created successfully.",
-                "email": admin.email,
-                "password": "TempAdminPass123!",  # ⚠️ CHANGE THIS PASSWORD
-            }
-        )
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ──────────────────────────────────────────────────────────────
-
-
 # ============================================================================
 # AUTHENTICATION & MAGIC LINKS
 # ============================================================================

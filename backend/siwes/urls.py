@@ -11,8 +11,6 @@ urlpatterns = [
     ),
     path("auth/verify-magic-link/", views.verify_magic_link, name="verify-magic-link"),
     path("auth/logout/", logout, name="logout"),
-    # TEMPORARY: One-time admin creation
-    path("temp-create-admin/", views.temp_create_admin, name="temp-create-admin"),
     # Admin
     path("admin/dashboard/", views.admin_dashboard, name="admin-dashboard"),
     path("admin/profile/", views.admin_own_profile, name="admin-own-profile"),
