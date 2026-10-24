@@ -710,22 +710,25 @@ def _send_rejection_email(intern, reason):
     user = intern.user
     subject = "Your SIWES application — decision update"
     message = (
-        f"Hi {user.first_name or 'there'},\n"
-        "Thank you for applying to the EarlyCode SIWES programme.\n"
+        f"Hi {user.first_name or 'there'},\n\n"
+        "Thank you for applying to the EarlyCode SIWES programme.\n\n"
         "After reviewing your submission, we are unable to accept your "
         "application at this time.\n\n"
         f"Reason: {reason}\n\n"
         "If you believe this is a mistake, please contact the EarlyCode "
-        "office.\n"
+        "office.\n\n"
         "— EarlyCode SIWES Team"
     )
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost"),
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost"),
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception as email_error:
+        logger.error("Rejection email failed: %s", email_error)
 
 
 def _edit_submission(request, intern):
@@ -1354,14 +1357,16 @@ def _send_instructor_welcome_email(user):
     )
 
     from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
-
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=from_email,
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception as email_error:
+        logger.error("Instructor welcome email failed: %s", email_error)
 
 
 def _notify_admins(user, intern):
@@ -1546,14 +1551,16 @@ def _send_documents_email(intern, uploaded_types):
     )
 
     from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@localhost")
-
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=from_email,
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception as email_error:
+        logger.error("Documents email failed: %s", email_error)
 
 
 class AdminInternPagination(PageNumberPagination):
