@@ -34,7 +34,7 @@ export async function apiFetch<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    // Handles ALL your old error shapes: detail, message, error,
+    // Handles ALL your old error shapes: details, message, error,
     // non_field_errors[0], and field errors like email[0] / title[0]
     let message: string | null =
       data?.detail || data?.message || data?.error || null;
