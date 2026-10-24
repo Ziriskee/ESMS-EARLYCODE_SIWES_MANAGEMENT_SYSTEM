@@ -225,7 +225,8 @@ CSRF_TRUSTED_ORIGINS = [
 # ============================================================================
 # Gmail SMTP — works in both dev and production.
 # Credentials read from environment variables (set in .env).
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# Use Resend REST API to bypass Render's free-tier SMTP port blocks
+EMAIL_BACKEND = "siwes.resend_backend.ResendAPIBackend"
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
