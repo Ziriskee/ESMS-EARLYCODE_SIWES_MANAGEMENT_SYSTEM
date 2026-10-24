@@ -1,3 +1,5 @@
+// In production: Vercel rewrites proxy /api/* to Render (same-origin, no CORS).
+// In local dev: set VITE_API_BASE_URL=http://localhost:8000/api in .env to bypass the proxy.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export class ApiError extends Error {
