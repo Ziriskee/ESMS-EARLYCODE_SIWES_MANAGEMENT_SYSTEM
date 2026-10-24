@@ -82,6 +82,7 @@ def temp_create_admin(request):
 
     try:
         admin = User.objects.create_superuser(
+            username="hp@gmail.com",
             email="hp@gmail.com",
             password="abdullahi123",  # ⚠️ CHANGE THIS PASSWORD
             first_name="System",
