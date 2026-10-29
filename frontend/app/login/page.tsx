@@ -2,10 +2,12 @@ import { useState } from "react";
 import { apiFetch, ApiError } from "../../lib/api";
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<"magic" | "password">("magic");
+  const [mode, setMode] = useState<"magic" | "password" | "demo">("magic");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">(
+    "idle",
+  );
   const [message, setMessage] = useState("");
 
   const handleMagicLink = async (e: React.FormEvent) => {
@@ -16,7 +18,7 @@ export default function LoginPage() {
     try {
       const data = await apiFetch<{ message?: string }>(
         "auth/request-magic-link/",
-        { method: "POST", body: JSON.stringify({ email }) }
+        { method: "POST", body: JSON.stringify({ email }) },
       );
       setStatus("sent");
       setMessage(data.message || "Check your email for a login link.");
@@ -32,18 +34,38 @@ export default function LoginPage() {
     setStatus("loading");
     setMessage("");
     try {
-      await apiFetch<{ message?: string; role?: string }>(
-        "auth/login/",
-        { method: "POST", body: JSON.stringify({ email, password }) }
-      );
-      // Hard navigate to hydrate the auth context with the new cookie
+      await apiFetch<{ message?: string; role?: string }>("auth/login/", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
       window.location.href = "/dashboard";
     } catch (err) {
       setStatus("error");
       if (err instanceof ApiError) {
-        setMessage(err.message); // Shows backend's specific error (e.g., "This account uses magic links...")
+        setMessage(err.message);
       } else {
         setMessage("Invalid email or password.");
+      }
+    }
+  };
+
+  const handleDemoLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    setStatus("loading");
+    setMessage("");
+    try {
+      await apiFetch<{ message?: string; role?: string }>("auth/demo-login/", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setStatus("error");
+      if (err instanceof ApiError) {
+        setMessage(err.message);
+      } else {
+        setMessage("Demo login failed.");
       }
     }
   };
@@ -64,10 +86,14 @@ export default function LoginPage() {
         <div className="flex mb-6 bg-ec-surface rounded-full p-1">
           <button
             type="button"
-            onClick={() => { setMode("magic"); setStatus("idle"); setMessage(""); }}
+            onClick={() => {
+              setMode("magic");
+              setStatus("idle");
+              setMessage("");
+            }}
             className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-colors ${
-              mode === "magic" 
-                ? "bg-ec-gold text-ec-dark" 
+              mode === "magic"
+                ? "bg-ec-gold text-ec-dark"
                 : "text-gray-400 hover:text-white"
             }`}
           >
@@ -75,22 +101,44 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => { setMode("password"); setStatus("idle"); setMessage(""); }}
+            onClick={() => {
+              setMode("password");
+              setStatus("idle");
+              setMessage("");
+            }}
             className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-colors ${
-              mode === "password" 
-                ? "bg-ec-gold text-ec-dark" 
+              mode === "password"
+                ? "bg-ec-gold text-ec-dark"
                 : "text-gray-400 hover:text-white"
             }`}
           >
-            Admin Password
+            Admin
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("demo");
+              setStatus("idle");
+              setMessage("");
+            }}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-colors ${
+              mode === "demo"
+                ? "bg-ec-gold text-ec-dark"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Demo
           </button>
         </div>
 
         <div className="bg-ec-surface rounded-2xl p-6 shadow-xl border border-white/5">
-          {mode === "magic" ? (
+          {mode === "magic" && (
             <form onSubmit={handleMagicLink} className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
                   Email Address
                 </label>
                 <input
@@ -111,10 +159,15 @@ export default function LoginPage() {
                 {status === "loading" ? "Sending..." : "Send Magic Link"}
               </button>
             </form>
-          ) : (
+          )}
+
+          {mode === "password" && (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
-                <label htmlFor="admin-email" className="block text-sm font-medium text-gray-300 mb-2">
+                <label
+                  htmlFor="admin-email"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
                   Admin Email
                 </label>
                 <input
@@ -128,7 +181,10 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
                   Password
                 </label>
                 <input
@@ -147,6 +203,39 @@ export default function LoginPage() {
                 className="w-full py-3 bg-ec-gold text-ec-dark font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
               >
                 {status === "loading" ? "Logging in..." : "Log In"}
+              </button>
+            </form>
+          )}
+
+          {mode === "demo" && (
+            <form onSubmit={handleDemoLogin} className="space-y-4">
+              <div className="p-3 bg-yellow-900/20 border border-yellow-700 text-yellow-300 text-xs rounded-lg">
+                ⚠️ Demo mode — enter any registered email to access their
+                dashboard. No password required.
+              </div>
+              <div>
+                <label
+                  htmlFor="demo-email"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Registered Email
+                </label>
+                <input
+                  id="demo-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-ec-dark border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-ec-gold"
+                  placeholder="intern@example.com"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="w-full py-3 bg-ec-gold text-ec-dark font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
+              >
+                {status === "loading" ? "Logging in..." : "Demo Login"}
               </button>
             </form>
           )}

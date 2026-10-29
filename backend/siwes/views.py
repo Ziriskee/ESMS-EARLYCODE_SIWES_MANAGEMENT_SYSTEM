@@ -250,6 +250,64 @@ def password_login(request):
 
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
+def demo_login(request):
+    """
+    ⚠️ TEMPORARY DEMO ENDPOINT — REMOVE BEFORE PRODUCTION.
+    Allows login by email only (no magic link, no password).
+    Gated behind DEMO_LOGIN_ENABLED=true env var.
+    """
+    if os.environ.get("DEMO_LOGIN_ENABLED", "false").lower() != "true":
+        return Response(
+            {"error": "Demo login is not enabled."}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    email = request.data.get("email")
+    if not email:
+        return Response(
+            {"error": "Email is required."}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response(
+            {"error": "No account found with this email."}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    if not user.is_active:
+        return Response(
+            {"error": "This account has been deactivated."}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Issue the exact same JWT cookie used by magic links
+    access = AccessToken.for_user(user)
+    response = Response({
+        "message": "Demo login successful.", 
+        "role": user.role,
+    })
+    
+    response.set_cookie(
+        key=settings.ACCESS_COOKIE_NAME,
+        value=str(access),
+        max_age=settings.SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax",
+        path="/",
+    )
+    
+    # Audit trail — every demo login is logged
+    logger.warning("DEMO LOGIN used for: %s (role: %s)", user.email, user.role)
+    
+    return response
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
 @throttle_classes([MagicLinkThrottle])
 def request_magic_link(request):
     """User enters email → Django sends magic link as HTML email."""
@@ -421,7 +479,6 @@ def logout(request):
         key=settings.ACCESS_COOKIE_NAME,
         path="/",
         samesite="Lax",
-        secure=not settings.DEBUG,
         domain=os.environ.get("SESSION_COOKIE_DOMAIN", None),  # ← ADD THIS LINE
     )
 
