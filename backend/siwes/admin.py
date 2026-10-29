@@ -2,9 +2,10 @@
 SIWES Management System - Django Admin Configuration
 Register all models in the Django admin panel for easy management.
 """
-
 from django.contrib import admin
+from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from .models import (
     Conversation,
     User,
@@ -28,31 +29,75 @@ def admin_users_only():
     offer only admins as choices."""
     return User.objects.filter(role=User.Role.ADMIN)
 
+User = get_user_model()
+
+
+# 1. Custom Creation Form (Removes phone, address, gender. Adds role, is_staff, is_superuser)
+class AdminUserCreationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("email", "first_name", "last_name", "role")
+
+
+# 2. Custom Change Form (For editing existing users)
+class AdminUserChangeForm(UserChangeForm):
+    class Meta(UserChangeForm.Meta):
+        model = User
+        fields = (
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "gender",
+            "address",
+            "role",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+        )
+
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
+    add_form = AdminUserCreationForm
+    form = AdminUserChangeForm
+
     list_display = [
         "email",
         "first_name",
         "last_name",
         "role",
-        "gender",
+        "is_staff",
+        "is_superuser",
         "is_active",
     ]
-    list_filter = ["role", "is_active", "gender"]
+    list_filter = ["role", "is_staff", "is_superuser", "is_active", "gender"]
     search_fields = ["email", "first_name", "last_name"]
     ordering = ["email"]
 
+    # Fields shown when EDITING an existing user
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         (
             "Personal info",
             {"fields": ("first_name", "last_name", "phone", "gender", "address")},
         ),
-        ("Permissions", {"fields": ("role", "is_active", "is_staff", "is_superuser")}),
+        (
+            "Permissions",
+            {
+                "fields": (
+                    "role",
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
     )
 
-    # This is the critical addition for the "Add User" form
+    # Fields shown when CREATING a new user (phone, address, gender removed)
     add_fieldsets = (
         (
             None,
@@ -65,7 +110,8 @@ class UserAdmin(BaseUserAdmin):
                     "first_name",
                     "last_name",
                     "role",
-                    "gender",
+                    "is_staff",
+                    "is_superuser",
                 ),
             },
         ),
