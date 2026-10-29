@@ -9,6 +9,7 @@ urlpatterns = [
     path(
         "auth/request-magic-link/", views.request_magic_link, name="request-magic-link"
     ),
+    path("auth/login/", views.password_login, name="password-login"),
     path("auth/verify-magic-link/", views.verify_magic_link, name="verify-magic-link"),
     path("auth/logout/", logout, name="logout"),
     # Admin

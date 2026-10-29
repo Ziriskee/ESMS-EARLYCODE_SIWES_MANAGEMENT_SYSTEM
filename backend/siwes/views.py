@@ -1,6 +1,6 @@
 import logging
 import os
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
 from django.core.mail import send_mail
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
@@ -183,6 +183,69 @@ class InternRegisterView(generics.CreateAPIView):
             )
         except Exception as email_error:
             logging.error(f"Welcome email failed: {email_error}")
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def password_login(request):
+    """Password login for Admins only. Interns/Instructors must use magic links."""
+    email = request.data.get("email")
+    password = request.data.get("password")
+    
+    if not email or not password:
+        return Response(
+            {"error": "Email and password are required."}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    # 1. Check if user exists and has a usable password
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        # Generic error to prevent user enumeration
+        return Response(
+            {"error": "Invalid email or password."}, 
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    if not user.has_usable_password():
+        return Response(
+            {"error": "This account uses magic links. Please request a login link instead."}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+        
+    # 2. Authenticate
+    auth_user = authenticate(request, username=email, password=password)
+    
+    if auth_user is None:
+        return Response(
+            {"error": "Invalid email or password."}, 
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+        
+    if not auth_user.is_active:
+        return Response(
+            {"error": "This account has been deactivated."}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 3. Issue the exact same JWT cookie used by magic links
+    access = AccessToken.for_user(auth_user)
+    response = Response({
+        "message": "Login successful.", 
+        "role": auth_user.role,
+    })
+    
+    response.set_cookie(
+        key=settings.ACCESS_COOKIE_NAME,
+        value=str(access),
+        max_age=settings.SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax",
+        path="/",
+    )
+    return response
 
 
 @api_view(["POST"])

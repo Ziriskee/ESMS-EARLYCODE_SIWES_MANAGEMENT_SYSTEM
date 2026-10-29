@@ -1,33 +1,50 @@
-import { apiFetch } from "@/lib/api";
 import { useState } from "react";
+import { apiFetch, ApiError } from "../../lib/api";
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<"magic" | "password">("magic");
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">(
-    "idle",
-  );
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
-
     setStatus("loading");
-
+    setMessage("");
     try {
       const data = await apiFetch<{ message?: string }>(
         "auth/request-magic-link/",
-        {
-          method: "POST",
-          body: JSON.stringify({ email }),
-        },
+        { method: "POST", body: JSON.stringify({ email }) }
       );
-
       setStatus("sent");
       setMessage(data.message || "Check your email for a login link.");
     } catch {
       setStatus("error");
       setMessage("Something went wrong. Please try again.");
+    }
+  };
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setStatus("loading");
+    setMessage("");
+    try {
+      await apiFetch<{ message?: string; role?: string }>(
+        "auth/login/",
+        { method: "POST", body: JSON.stringify({ email, password }) }
+      );
+      // Hard navigate to hydrate the auth context with the new cookie
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setStatus("error");
+      if (err instanceof ApiError) {
+        setMessage(err.message); // Shows backend's specific error (e.g., "This account uses magic links...")
+      } else {
+        setMessage("Invalid email or password.");
+      }
     }
   };
 
@@ -39,90 +56,120 @@ export default function LoginPage() {
             SIWES <span className="text-ec-gold">Login</span>
           </h1>
           <p className="text-gray-400 mt-2 font-body">
-            Enter your email to receive a secure login link.
+            Access your training dashboard
           </p>
         </div>
 
-        {status === "sent" ? (
-          <div className="p-6 rounded-2xl border border-green-500/30 bg-green-500/10 text-center">
-            <svg
-              className="w-12 h-12 text-green-400 mx-auto mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-            <h2 className="text-xl font-bold text-white font-heading mb-2">
-              Check Your Email
-            </h2>
-            <p className="text-gray-300 font-body">{message}</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-[#FBCD15] mb-2 font-body">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-600 bg-[#2A2A2B] px-4 py-3 text-white placeholder-gray-500 focus:border-[#FBCD15] focus:outline-none font-body"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-
-            {status === "error" && (
-              <p className="text-sm text-red-400 font-body">{message}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={status === "loading"}
-              className="w-full px-6 py-3 bg-ec-gold text-ec-dark rounded-full font-bold text-sm hover:scale-105 hover:shadow-lg hover:shadow-ec-gold/20 transition-all duration-300 font-body flex items-center justify-center gap-2"
-            >
-              {status === "loading" ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Sending...
-                </>
-              ) : (
-                "Send Login Link"
-              )}
-            </button>
-          </form>
-        )}
-
-        <div className="text-center mt-6">
-          <a
-            href="/register"
-            className="text-gray-400 hover:text-ec-gold transition-colors text-sm font-body"
+        {/* Tab Switcher */}
+        <div className="flex mb-6 bg-ec-surface rounded-full p-1">
+          <button
+            type="button"
+            onClick={() => { setMode("magic"); setStatus("idle"); setMessage(""); }}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-colors ${
+              mode === "magic" 
+                ? "bg-ec-gold text-ec-dark" 
+                : "text-gray-400 hover:text-white"
+            }`}
           >
-            Don't have an account? Register
-          </a>
+            Magic Link
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("password"); setStatus("idle"); setMessage(""); }}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-colors ${
+              mode === "password" 
+                ? "bg-ec-gold text-ec-dark" 
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Admin Password
+          </button>
         </div>
+
+        <div className="bg-ec-surface rounded-2xl p-6 shadow-xl border border-white/5">
+          {mode === "magic" ? (
+            <form onSubmit={handleMagicLink} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+                  Email Address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-ec-dark border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-ec-gold"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="w-full py-3 bg-ec-gold text-ec-dark font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
+              >
+                {status === "loading" ? "Sending..." : "Send Magic Link"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
+              <div>
+                <label htmlFor="admin-email" className="block text-sm font-medium text-gray-300 mb-2">
+                  Admin Email
+                </label>
+                <input
+                  id="admin-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-ec-dark border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-ec-gold"
+                  placeholder="admin@earlycode.com"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-ec-dark border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-ec-gold"
+                  placeholder="••••••••"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="w-full py-3 bg-ec-gold text-ec-dark font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
+              >
+                {status === "loading" ? "Logging in..." : "Log In"}
+              </button>
+            </form>
+          )}
+
+          {/* Status Messages */}
+          {status === "sent" && (
+            <div className="mt-4 p-3 bg-green-900/30 border border-green-700 text-green-300 text-sm rounded-lg text-center">
+              {message}
+            </div>
+          )}
+          {status === "error" && (
+            <div className="mt-4 p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm rounded-lg text-center">
+              {message}
+            </div>
+          )}
+        </div>
+
+        <p className="text-center text-gray-500 text-sm mt-6">
+          Don't have an account?{" "}
+          <a href="/register" className="text-ec-gold hover:underline">
+            Register here
+          </a>
+        </p>
       </div>
     </div>
   );
