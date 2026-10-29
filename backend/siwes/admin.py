@@ -23,23 +23,40 @@ from .models import (
     InternDocument,
 )
 
+User = get_user_model()
+
 
 def admin_users_only():
     """Returns a queryset of only Admin users — for FK dropdowns that should
     offer only admins as choices."""
     return User.objects.filter(role=User.Role.ADMIN)
 
-User = get_user_model()
-
-
-# 1. Custom Creation Form (Removes phone, address, gender. Adds role, is_staff, is_superuser)
+# 1. Custom Creation Form
 class AdminUserCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ("email", "first_name", "last_name", "role")
+        fields = (
+            "email",
+            "first_name",
+            "last_name",
+            "role",
+            "is_staff",
+            "is_superuser",
+        )
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.set_password(self.cleaned_data["password1"])
+        # FIX: AbstractUser requires a unique username. Auto-set it to the email.
+        user.username = user.email
+        if commit:
+            user.save()
+            if hasattr(self, "save_m2m"):
+                self.save_m2m()
+        return user
 
 
-# 2. Custom Change Form (For editing existing users)
+# 2. Custom Change Form
 class AdminUserChangeForm(UserChangeForm):
     class Meta(UserChangeForm.Meta):
         model = User
@@ -97,7 +114,7 @@ class UserAdmin(BaseUserAdmin):
         ),
     )
 
-    # Fields shown when CREATING a new user (phone, address, gender removed)
+    # Fields shown when CREATING a new user
     add_fieldsets = (
         (
             None,
