@@ -14,8 +14,6 @@ _BACKEND_DIR = _Path(__file__).resolve().parent.parent  # backend/
 load_dotenv(_BACKEND_DIR / ".env", override=True)
 load_dotenv(_BACKEND_DIR.parent / ".env", override=True)
 
-print(f"🚨 DEBUG CHECK: LOG_MAGIC_LINKS = {os.environ.get('LOG_MAGIC_LINKS')}")
-print(f"🚨 DEBUG CHECK: DEBUG = {os.environ.get('DEBUG')}" )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -314,7 +312,3 @@ LOGGING = {
     },
 }
 
-
-print(
-    f"--- DEBUG={DEBUG} | SSL_REDIRECT={SECURE_SSL_REDIRECT} | CORS={CORS_ALLOWED_ORIGINS}"
-)

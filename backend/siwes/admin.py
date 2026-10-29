@@ -30,7 +30,7 @@ def admin_users_only():
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(BaseUserAdmin):
     list_display = [
         "email",
         "first_name",
@@ -38,16 +38,36 @@ class UserAdmin(admin.ModelAdmin):
         "role",
         "gender",
         "is_active",
-    ]  # ← added gender
-    list_filter = ["role", "is_active", "gender"]  # ← added gender
+    ]
+    list_filter = ["role", "is_active", "gender"]
     search_fields = ["email", "first_name", "last_name"]
+    ordering = ["email"]
+
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         (
             "Personal info",
             {"fields": ("first_name", "last_name", "phone", "gender", "address")},
-        ),  # ← added
+        ),
         ("Permissions", {"fields": ("role", "is_active", "is_staff", "is_superuser")}),
+    )
+
+    # This is the critical addition for the "Add User" form
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "email",
+                    "password1",
+                    "first_name",
+                    "last_name",
+                    "role",
+                    "gender",
+                ),
+            },
+        ),
     )
 
 

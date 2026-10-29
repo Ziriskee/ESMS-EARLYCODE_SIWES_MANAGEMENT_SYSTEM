@@ -2211,6 +2211,13 @@ def intern_dashboard(request):
         attendance_has_schedule = True
         window_end = today + timedelta(days=35)
 
+        # Cap the window at the internship end date to prevent showing dates past the IT period
+        intern_end_date = (
+            getattr(intern, "org_end_date", None) or intern.school_end_date
+        )
+        if intern_end_date and intern_end_date < window_end:
+            window_end = intern_end_date
+
         day_map = {
             "MON": 0,
             "TUE": 1,
